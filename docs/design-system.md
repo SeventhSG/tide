@@ -1,4 +1,4 @@
-# Keel design system
+# Tide design system
 
 The rules the code is checked against. If a screen disagrees with this file, one of the two
 is wrong, and this file is the one that gets amended on purpose.
@@ -102,7 +102,7 @@ forbids `NotificationManagerCompat` imports outside that module.
 | `Demanding` | Heads-up with sound, respects quiet hours |
 | `Critical` | Breaks quiet hours. The only tier that does. |
 
-Keel is a notification-heavy app on purpose, so the discipline has to be somewhere. It is
+Tide is a notification-heavy app on purpose, so the discipline has to be somewhere. It is
 here: the failure mode is not volume, it is uniform volume, which teaches people to swipe
 without reading. Settings keeps a ledger of every notification posted and whether it was
 opened or dismissed, with a one-tap demote, because a source you always dismiss should be

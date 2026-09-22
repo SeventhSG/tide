@@ -1,118 +1,99 @@
-"""Render the Keel mark from explicit geometry so the shape can be looked at
-rather than assumed. v5: hull shell with flat deck edges, plus a stubby keel blade. Shipped.
+"""Render the Tide mark from the same geometry as brand/tide-mark.svg, so the
+shape can be looked at rather than assumed.
 
-v1 failed: a uniform-weight arc with a short centre stroke read as a tuning
-fork. Hull sections are wide and shallow, and the keel must be clearly
-subordinate to the hull it hangs from.
+The output sheet is the check that matters: 48px is roughly what a home screen
+shows, and a mark only verified at 512 is not verified. Regenerate and look at
+it after any geometry change.
+
+    python tools/render_brand.py
 """
 from PIL import Image, ImageDraw
-import os
+import math, os
 
-OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "brand")
-CANVAS = 108.0          # Android adaptive-icon grid, safe zone 18..90
-SS = 8                  # supersample factor for clean curves
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, "brand")
+CANVAS, SS = 108.0, 8                  # adaptive-icon grid, 8x supersample
 
-ACCENT = (63, 169, 139, 255)    # #3FA98B starboard green
-GROUND = (14, 17, 20, 255)      # #0E1114
+ACCENT = (63, 169, 139, 255)           # #3FA98B
+GROUND = (14, 17, 20, 255)             # #0E1114
 LIGHT = (232, 237, 240, 255)
 
-# Hull section, drawn as a shell of roughly constant wall thickness rather
-# than a wedge. Outer curve is the wetted hull, inner curve the inside of the
-# shell, and both terminate at the same deck height, leaving a flat deck edge
-# at each end instead of a knife point. Beam is wider than draft, as on a hull.
-DECK_Y = 34.0
-OUT_L, OUT_R = 20.0, 88.0
-IN_L, IN_R = 28.0, 80.0
-CTRL_OUTER = 86.0       # outer centre bottom y = 60, so draft 26 against beam 68
-CTRL_INNER = 62.0       # inner centre bottom y = 48, so wall 12 thick
-
-# Keel blade: narrow, subordinate, rooted inside the shell wall.
-FIN_TOP_Y, FIN_BOT_Y = 52.0, 80.0
-FIN_TOP_W, FIN_BOT_W = 9.0, 6.0
+WAVE_L, WAVE_R = 20.0, 88.0            # one full tidal cycle
+DATUM_L, DATUM_R = 21.0, 87.0          # chart datum, overhangs the curve
+MID_Y, AMP = 54.0, 18.0
+WAVE_W, DATUM_W = 11.0, 6.0
 
 
-def quad(p0, c, p2, n=160):
-    out = []
+def sine(n=240):
+    pts = []
     for i in range(n + 1):
         t = i / n
-        u = 1 - t
-        out.append((u*u*p0[0] + 2*u*t*c[0] + t*t*p2[0],
-                    u*u*p0[1] + 2*u*t*c[1] + t*t*p2[1]))
-    return out
+        pts.append((WAVE_L + (WAVE_R - WAVE_L) * t,
+                    MID_Y - AMP * math.sin(2 * math.pi * t)))
+    return pts
 
 
-def hull_polygon():
-    outer = quad((OUT_L, DECK_Y), (54, CTRL_OUTER), (OUT_R, DECK_Y))
-    inner = quad((IN_L, DECK_Y), (54, CTRL_INNER), (IN_R, DECK_Y))
-    return outer + inner[::-1]
+def stroke(d, pts, w, s, colour):
+    sp = [(x * s, y * s) for x, y in pts]
+    d.line(sp, fill=colour, width=max(1, int(round(w * s))), joint="curve")
+    r = w * s / 2.0
+    for x, y in (sp[0], sp[-1]):
+        d.ellipse([x - r, y - r, x + r, y + r], fill=colour)
 
 
-def fin_polygon():
-    ht, hb = FIN_TOP_W / 2, FIN_BOT_W / 2
-    return [(54 - ht, FIN_TOP_Y), (54 + ht, FIN_TOP_Y),
-            (54 + hb, FIN_BOT_Y), (54 - hb, FIN_BOT_Y)]
-
-
-def draw_mark(size, colour, bg=None):
+def draw(size, colour, bg=None):
     n = size * SS
     s = n / CANVAS
     img = Image.new("RGBA", (n, n), bg if bg else (0, 0, 0, 0))
-    layer = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    sc = lambda pts: [(x * s, y * s) for x, y in pts]
-
-    d.polygon(sc(fin_polygon()), fill=colour)
-    r = FIN_BOT_W / 2 * s                       # round the blade tip
-    cx, cy = 54 * s, FIN_BOT_Y * s
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=colour)
-    d.polygon(sc(hull_polygon()), fill=colour)
-
-    img.alpha_composite(layer)
+    lay = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(lay)
+    stroke(d, [(DATUM_L, MID_Y), (DATUM_R, MID_Y)], DATUM_W, s, colour)
+    stroke(d, sine(), WAVE_W, s, colour)
+    img.alpha_composite(lay)
     return img.resize((size, size), Image.LANCZOS)
 
 
-def mask_circle(img):
+def mask(img, squircle=False):
     n = img.size[0]
     m = Image.new("L", (n * SS, n * SS), 0)
-    ImageDraw.Draw(m).ellipse([0, 0, n * SS - 1, n * SS - 1], fill=255)
-    out = img.copy(); out.putalpha(m.resize((n, n), Image.LANCZOS)); return out
+    dd = ImageDraw.Draw(m)
+    box = [0, 0, n * SS - 1, n * SS - 1]
+    if squircle:
+        dd.rounded_rectangle(box, radius=int(n * SS * 0.24), fill=255)
+    else:
+        dd.ellipse(box, fill=255)
+    out = img.copy()
+    out.putalpha(m.resize((n, n), Image.LANCZOS))
+    return out
 
 
-def mask_squircle(img):
-    n = img.size[0]
-    m = Image.new("L", (n * SS, n * SS), 0)
-    ImageDraw.Draw(m).rounded_rectangle(
-        [0, 0, n * SS - 1, n * SS - 1], radius=int(n * SS * 0.24), fill=255)
-    out = img.copy(); out.putalpha(m.resize((n, n), Image.LANCZOS)); return out
-
-
-def contact_sheet():
+def sheet():
     cell, pad = 192, 16
-    cells = [(draw_mark(192, ACCENT, GROUND), "192px"),
-             (draw_mark(96, ACCENT, GROUND), "96px"),
-             (draw_mark(48, ACCENT, GROUND), "48px, homescreen"),
-             (mask_circle(draw_mark(192, ACCENT, GROUND)), "circle mask"),
-             (mask_squircle(draw_mark(192, ACCENT, GROUND)), "squircle mask"),
-             (draw_mark(192, LIGHT, GROUND), "mono on dark"),
-             (draw_mark(192, GROUND, LIGHT), "mono on light")]
+    cells = [(draw(192, ACCENT, GROUND), "192px"),
+             (draw(96, ACCENT, GROUND), "96px"),
+             (draw(48, ACCENT, GROUND), "48px, homescreen"),
+             (mask(draw(192, ACCENT, GROUND)), "circle mask"),
+             (mask(draw(192, ACCENT, GROUND), True), "squircle mask"),
+             (draw(192, LIGHT, GROUND), "mono on dark"),
+             (draw(192, GROUND, LIGHT), "mono on light")]
     w = len(cells) * (cell + pad) + pad
-    sheet = Image.new("RGBA", (w, cell + pad * 2 + 24), (28, 28, 30, 255))
-    d = ImageDraw.Draw(sheet)
+    sh = Image.new("RGBA", (w, cell + pad * 2 + 24), (28, 28, 30, 255))
+    dd = ImageDraw.Draw(sh)
     x = pad
     for img, lab in cells:
         c = img if img.size[0] == cell else img.resize((cell, cell), Image.NEAREST)
-        sheet.alpha_composite(c, (x, pad))
-        d.text((x, pad + cell + 6), lab, fill=(180, 186, 190, 255))
+        sh.alpha_composite(c, (x, pad))
+        dd.text((x, pad + cell + 6), lab, fill=(180, 186, 190, 255))
         x += cell + pad
-    return sheet
+    return sh
 
 
 if __name__ == "__main__":
     for sz in (512, 192, 96, 48):
-        draw_mark(sz, ACCENT, GROUND).save(os.path.join(OUT, f"keel-{sz}.png"))
-    draw_mark(512, ACCENT).save(os.path.join(OUT, "keel-512-transparent.png"))
-    contact_sheet().save(os.path.join(OUT, "keel-icon-tests.png"))
-    ys = [y for _, y in hull_polygon()] + [y for _, y in fin_polygon()]
-    xs = [x for x, _ in hull_polygon()]
-    print(f"bounds x {min(xs):.1f}..{max(xs):.1f}  y {min(ys):.1f}..{max(ys) + FIN_BOT_W/2:.1f}"
-          f"  (safe zone 18..90)")
+        draw(sz, ACCENT, GROUND).save(os.path.join(OUT, f"tide-{sz}.png"))
+    draw(512, ACCENT).save(os.path.join(OUT, "tide-512-transparent.png"))
+    sheet().save(os.path.join(OUT, "tide-icon-tests.png"))
+    top = MID_Y - AMP - WAVE_W / 2
+    bot = MID_Y + AMP + WAVE_W / 2
+    print(f"bounds x {DATUM_L - DATUM_W/2:.1f}..{DATUM_R + DATUM_W/2:.1f}"
+          f"  y {top:.1f}..{bot:.1f}  (safe zone 18..90)")

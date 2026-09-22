@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <title>Tide icon</title>
+  <rect width="108" height="108" fill="#0E1114"/>
+  <g fill="none" stroke="#3FA98B" stroke-linecap="round">
+    <!-- Chart datum. A tide curve is always drawn against one, and it is the
+         line that turns a generic wave into a reading. -->
+    <path stroke-width="6" d="M21 54 H87"/>
+    <!-- One full tidal cycle: high water, mean, low water, mean. -->
+    <path stroke-width="11"
+          d="M20 54 C32.24 30.06 41.76 30.06 54 54 C66.24 77.94 75.76 77.94 88 54"/>
+  </g>
+</svg>

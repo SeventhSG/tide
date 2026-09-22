@@ -32,7 +32,7 @@ first, and "Needs you" driven entirely by open occurrences from the scheduler.
 
 **5. Money.** Commitments, renewals and WorkManager reminders. The optional notification
 listener comes last and stays isolated, because it is the one component that would have to be
-removed if Keel were ever published to Play.
+removed if Tide were ever published to Play.
 
 **6. Inbox.** The `:core:notify` priority rules engine, then the ntfy transport, then the
 source manager. The persistent connection gets measured with Battery Historian over 24 hours

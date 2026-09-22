@@ -1,6 +1,6 @@
-<img src="brand/keel-192.png" alt="" width="96" align="left" hspace="12">
+<img src="brand/tide-192.png" alt="" width="96" align="left" hspace="12">
 
-# Keel
+# Tide
 
 A private life dashboard for Android. Training, body, commitments and a small local model,
 in one app, on one device.
@@ -19,12 +19,12 @@ The information already exists. It is spread across a health app, a notes app, a
 a spreadsheet and four renewal emails, and nothing joins it up. The products that try to join
 it up want the data on their servers first.
 
-Keel inverts that. The database is local, the model that reads it runs on the same device,
+Tide inverts that. The database is local, the model that reads it runs on the same device,
 and the only thing that ever leaves is a backup file you export yourself.
 
 ## What it does
 
-- **Schedule.** Keel holds what you intend to do and what actually happened, and most of what
+- **Schedule.** Tide holds what you intend to do and what actually happened, and most of what
   it is useful for is the gap between the two. Recurring commitments, daily or weekly, with a
   look-ahead the night before, a nudge inside the window and a confirmation after it closes.
   It only asks what it does not already know: if you logged the session, it does not ask
@@ -64,7 +64,9 @@ custom system, because the native one is better than anything worth reinventing 
 
 See [docs/design-system.md](docs/design-system.md) and [docs/brand.md](docs/brand.md).
 
-The mark is a hull seen end-on with the keel below it, which is what the app claims to be.
+The mark is one tidal cycle drawn against a chart datum, which is how a tide is actually
+plotted and also how this app reads a life: the line matters less than where it sits
+relative to the level.
 
 ## Stack
 
