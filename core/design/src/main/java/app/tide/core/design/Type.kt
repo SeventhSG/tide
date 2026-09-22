@@ -1,14 +1,12 @@
 package app.tide.core.design
 
 import androidx.compose.material3.Typography
-import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 
 /**
@@ -16,35 +14,37 @@ import androidx.compose.ui.unit.sp
  *
  * Manrope carries the interface. It is smooth and slightly geometric and holds
  * up at small sizes on a dark ground, where Roboto goes flat. Roboto Flex was the
- * original choice for being the system font; it was dropped because the app is
+ * original pick for being the system font; it was dropped because the app is
  * dark-first and Roboto's low-contrast strokes disappear against deep water.
  *
- * Every numeral, unit and data label is IBM Plex Mono with tabular figures, so a
- * column of numbers never shifts as values change. A number rendered in the body
- * font is a bug.
+ * Every numeral, unit and data label is IBM Plex Mono, so a column of numbers
+ * never shifts as values change. A number rendered in the body font is a bug.
  *
- * Both are fetched through the downloadable-fonts provider rather than bundled,
- * which keeps roughly 400KB out of the APK. The provider needs the certificates
- * in res/values/font_certs.xml and a fallback when the fetch fails.
+ * **Bundled, not downloaded.** The obvious route is the Play Services
+ * downloadable-fonts provider, which keeps about 500KB out of the APK. It is the
+ * wrong call here: it needs Play Services present, it needs a network fetch, and
+ * it fails silently to the system font when either is missing. An app whose
+ * entire premise is that it works with no network should not have its typography
+ * depend on one. 500KB is a fair price for determinism.
+ *
+ * Manrope ships as a single variable font, so all five weights come from one
+ * file via [FontVariation]. Plex Mono is three static cuts.
  */
-private val provider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs,
+@OptIn(ExperimentalTextApi::class)
+private val Manrope = FontFamily(
+    Font(R.font.manrope_variable, FontWeight.Normal, variationSettings = weight(400)),
+    Font(R.font.manrope_variable, FontWeight.Medium, variationSettings = weight(500)),
+    Font(R.font.manrope_variable, FontWeight.SemiBold, variationSettings = weight(600)),
+    Font(R.font.manrope_variable, FontWeight.Bold, variationSettings = weight(700)),
+    Font(R.font.manrope_variable, FontWeight.ExtraBold, variationSettings = weight(800)),
 )
 
-private val Manrope = FontFamily(
-    Font(GoogleFont("Manrope"), provider, FontWeight.Normal),
-    Font(GoogleFont("Manrope"), provider, FontWeight.Medium),
-    Font(GoogleFont("Manrope"), provider, FontWeight.SemiBold),
-    Font(GoogleFont("Manrope"), provider, FontWeight.Bold),
-    Font(GoogleFont("Manrope"), provider, FontWeight.ExtraBold),
-)
+private fun weight(w: Int) = FontVariation.Settings(FontVariation.weight(w))
 
 val PlexMono = FontFamily(
-    Font(GoogleFont("IBM Plex Mono"), provider, FontWeight.Normal),
-    Font(GoogleFont("IBM Plex Mono"), provider, FontWeight.Medium),
-    Font(GoogleFont("IBM Plex Mono"), provider, FontWeight.SemiBold),
+    Font(R.font.plex_mono_regular, FontWeight.Normal),
+    Font(R.font.plex_mono_medium, FontWeight.Medium),
+    Font(R.font.plex_mono_semibold, FontWeight.SemiBold),
 )
 
 val TideTypography = Typography(
@@ -70,7 +70,7 @@ val TideTypography = Typography(
     ),
 )
 
-/** Every numeral on screen. Tabular figures are the whole point. */
+/** Every numeral on screen. */
 val DataStyle = TextStyle(
     fontFamily = PlexMono,
     fontWeight = FontWeight.Medium,
@@ -78,7 +78,7 @@ val DataStyle = TextStyle(
     lineHeight = 20.sp,
 )
 
-/** Small caps-ish section labels. Rationed: see the eyebrow rule in the docs. */
+/** Small section labels. Rationed: see the eyebrow rule in docs/design-system.md. */
 val LabelStyle = TextStyle(
     fontFamily = PlexMono,
     fontWeight = FontWeight.Normal,

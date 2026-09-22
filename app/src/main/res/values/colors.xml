@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Abyss. Only shows where the adaptive-icon foreground does not reach. -->
+    <color name="ic_launcher_background">#03070B</color>
+</resources>

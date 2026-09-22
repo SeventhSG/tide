@@ -41,3 +41,6 @@ keystore.properties
 
 # Screenshot test output
 **/build/outputs/roborazzi/
+
+# Local SDK path, machine-specific
+local.properties
