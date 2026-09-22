@@ -10,6 +10,8 @@ import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 class Converters {
@@ -21,6 +23,9 @@ class Converters {
 
     @TypeConverter fun equipmentToString(v: Equipment): String = v.name
     @TypeConverter fun stringToEquipment(v: String): Equipment = Equipment.valueOf(v)
+
+    @TypeConverter fun scheduleKindToString(v: ScheduleKind): String = v.name
+    @TypeConverter fun stringToScheduleKind(v: String): ScheduleKind = ScheduleKind.valueOf(v)
 }
 
 @Dao
@@ -193,6 +198,108 @@ interface BodyWeightDao {
     suspend fun insert(w: BodyWeightEntity)
 }
 
+@Dao
+interface ScheduleDao {
+
+    @Query("SELECT * FROM schedule_rule WHERE archivedAt IS NULL ORDER BY createdAt")
+    fun observeActive(): Flow<List<ScheduleRuleEntity>>
+
+    @Query("SELECT * FROM schedule_rule WHERE archivedAt IS NULL ORDER BY createdAt")
+    suspend fun active(): List<ScheduleRuleEntity>
+
+    @Query("SELECT * FROM schedule_rule WHERE id = :id")
+    suspend fun byId(id: String): ScheduleRuleEntity?
+
+    @Upsert suspend fun upsert(rule: ScheduleRuleEntity)
+
+    @Query("UPDATE schedule_rule SET archivedAt = :at WHERE id = :id")
+    suspend fun archive(id: String, at: Long)
+
+    @Query("SELECT * FROM skipped_occurrence WHERE ruleId = :ruleId")
+    suspend fun skipsFor(ruleId: String): List<SkippedOccurrenceEntity>
+
+    @Query("SELECT * FROM skipped_occurrence")
+    suspend fun allSkips(): List<SkippedOccurrenceEntity>
+
+    @Upsert suspend fun skip(occurrence: SkippedOccurrenceEntity)
+
+    @Query(
+        """
+        DELETE FROM skipped_occurrence
+        WHERE ruleId = :ruleId AND dueEpochDay = :dueEpochDay AND occurrenceIndex = :index
+        """,
+    )
+    suspend fun unskip(ruleId: String, dueEpochDay: Long, index: Int)
+
+    /**
+     * The instants this rule's thing actually happened, which is what the
+     * reconciler resolves against.
+     *
+     * Returned as timestamps and turned into local dates in Kotlin, not bucketed
+     * into days here. Day bucketing in SQL needs a fixed offset, and a fixed
+     * offset is wrong twice a year: a Sunday session logged the weekend the
+     * clocks change would land on the wrong day and read as a missed week.
+     *
+     * Training evidence is a finished session. An open session is not evidence
+     * yet: you are in the middle of it, and counting it would tick the box
+     * before the work was done.
+     */
+    @Query(
+        """
+        SELECT startedAt FROM session
+        WHERE endedAt IS NOT NULL AND startedAt BETWEEN :from AND :to
+        ORDER BY startedAt
+        """,
+    )
+    suspend fun trainingEvidenceAt(from: Long, to: Long): List<Long>
+
+    @Query("SELECT at FROM body_weight WHERE at BETWEEN :from AND :to ORDER BY at")
+    suspend fun bodyWeightEvidenceAt(from: Long, to: Long): List<Long>
+}
+
+/**
+ * Version 2 adds the schedule.
+ *
+ * Written by hand and tested, because this database holds the only copy of the
+ * data and there is no server to restore it from. Both statements are pure
+ * additions: nothing existing is touched, so a failure here cannot cost a
+ * training history.
+ */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `schedule_rule` (
+                `id` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `kind` TEXT NOT NULL,
+                `recurrence` TEXT NOT NULL,
+                `anchorEpochDay` INTEGER NOT NULL,
+                `untilEpochDay` INTEGER,
+                `createdAt` INTEGER NOT NULL,
+                `archivedAt` INTEGER,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_schedule_rule_kind` ON `schedule_rule` (`kind`)")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `skipped_occurrence` (
+                `ruleId` TEXT NOT NULL,
+                `dueEpochDay` INTEGER NOT NULL,
+                `occurrenceIndex` INTEGER NOT NULL,
+                `skippedAt` INTEGER NOT NULL,
+                `note` TEXT,
+                PRIMARY KEY(`ruleId`, `dueEpochDay`, `occurrenceIndex`),
+                FOREIGN KEY(`ruleId`) REFERENCES `schedule_rule`(`id`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
 @Database(
     entities = [
         ExerciseEntity::class,
@@ -202,8 +309,10 @@ interface BodyWeightDao {
         WorkoutSetEntity::class,
         BodyWeightEntity::class,
         ExerciseStateEntity::class,
+        ScheduleRuleEntity::class,
+        SkippedOccurrenceEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -213,6 +322,7 @@ abstract class TideDatabase : RoomDatabase() {
     abstract fun sessions(): SessionDao
     abstract fun exerciseState(): ExerciseStateDao
     abstract fun bodyWeight(): BodyWeightDao
+    abstract fun schedule(): ScheduleDao
 
     companion object {
         const val NAME = "tide.db"

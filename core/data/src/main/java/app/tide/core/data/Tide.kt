@@ -5,8 +5,10 @@ import androidx.room.Room
 import app.tide.core.data.db.Equipment
 import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.Muscle
+import app.tide.core.data.db.MIGRATION_1_2
 import app.tide.core.data.db.TideDatabase
 import app.tide.core.data.importer.TrainingImporter
+import app.tide.core.data.schedule.ScheduleRepository
 import app.tide.core.data.training.ProgressionRule
 import app.tide.core.data.training.RuleCodec
 import app.tide.core.data.training.TrainingRepository
@@ -27,6 +29,7 @@ object Tide {
 
     @Volatile private var database: TideDatabase? = null
     @Volatile private var repository: TrainingRepository? = null
+    @Volatile private var scheduleRepository: ScheduleRepository? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -41,6 +44,7 @@ object Tide {
                 // of the data and there is no server to restore it from, so a
                 // missing migration must fail loudly rather than wipe a year of
                 // training.
+                .addMigrations(MIGRATION_1_2)
                 .build()
                 .also {
                     database = it
@@ -59,6 +63,12 @@ object Tide {
                     bodyWeight = d.bodyWeight(),
                 ).also { repository = it }
             }
+        }
+
+    fun schedule(context: Context): ScheduleRepository =
+        scheduleRepository ?: synchronized(this) {
+            scheduleRepository ?: ScheduleRepository(db(context).schedule())
+                .also { scheduleRepository = it }
         }
 
     /**

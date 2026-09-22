@@ -34,6 +34,8 @@ android {
 }
 
 dependencies {
+    api(project(":core:schedule"))
+
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     implementation(libs.kotlinx.coroutines.core)

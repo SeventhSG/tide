@@ -170,6 +170,69 @@ data class WorkoutSetEntity(
 }
 
 /**
+ * What a schedule rule is about, so evidence can be matched to it.
+ *
+ * Stored as a string, so a later domain adds a value without a migration.
+ */
+enum class ScheduleKind {
+    /** Satisfied by a logged training session. */
+    Training,
+
+    /** Satisfied by a body weight entry. */
+    BodyWeight,
+
+    /** Satisfied by a recorded payment or renewal. */
+    Money,
+
+    /** Nothing in the database can satisfy it, so it is ticked by hand. */
+    Manual,
+}
+
+/**
+ * A recurring commitment.
+ *
+ * The recurrence is a string that a person can read and repair in a SQLite
+ * browser, for the same reason the progression rule is. Dates are epoch days
+ * rather than millis: a rule falls on a date, not at an instant, and storing
+ * a time would invent a precision the rule does not have.
+ */
+@Entity(tableName = "schedule_rule", indices = [Index("kind")])
+data class ScheduleRuleEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val kind: ScheduleKind,
+    /** Serialised Recurrence. See RecurrenceCodec. */
+    val recurrence: String,
+    val anchorEpochDay: Long,
+    val untilEpochDay: Long? = null,
+    val createdAt: Long,
+    val archivedAt: Long? = null,
+)
+
+/**
+ * An occurrence the person deliberately set aside.
+ *
+ * Only skips are stored. Everything else about an occurrence is derived from
+ * the rule and the record every time, because a materialised calendar and a
+ * rule that has since changed will disagree, and the stale table always wins
+ * by accident.
+ */
+@Entity(
+    tableName = "skipped_occurrence",
+    primaryKeys = ["ruleId", "dueEpochDay", "occurrenceIndex"],
+    foreignKeys = [
+        ForeignKey(ScheduleRuleEntity::class, ["id"], ["ruleId"], onDelete = ForeignKey.CASCADE),
+    ],
+)
+data class SkippedOccurrenceEntity(
+    val ruleId: String,
+    val dueEpochDay: Long,
+    val occurrenceIndex: Int,
+    val skippedAt: Long,
+    val note: String? = null,
+)
+
+/**
  * A working set with the muscles it trained, as the muscle map reads them.
  *
  * Not a table. This is the shape of a join, kept here so the query and the

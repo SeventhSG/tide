@@ -10,7 +10,7 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 103 green: 15 progression, 9 repository round-trip, 36 importer and CSV, 15 muscle map, 13 viewmodel, 15 screenshot |
+| Tests | 147 green, including 30 schedule and reconciler, and 2 on the version 1 to 2 migration |
 | Screens rendering | Today, Session logger |
 | Screens wired to data | Session logger, Import, Muscle map |
 
