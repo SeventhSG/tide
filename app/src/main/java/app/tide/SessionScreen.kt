@@ -166,9 +166,27 @@ fun SessionScreen(
 
             Spacer(Modifier.height(12.dp))
             Card {
-                Stepper("LOAD, KG", state.loadKg)
+                Stepper(
+                    "LOAD, KG",
+                    state.loadKg,
+                    onDecrement = {
+                        onLoadChange(((state.loadKg.toDoubleOrNull() ?: 0.0) - LoadStepKg).coerceAtLeast(0.0))
+                    },
+                    onIncrement = {
+                        onLoadChange((state.loadKg.toDoubleOrNull() ?: 0.0) + LoadStepKg)
+                    },
+                )
                 Spacer(Modifier.height(14.dp))
-                Stepper("REPS", state.reps)
+                Stepper(
+                    "REPS",
+                    state.reps,
+                    onDecrement = {
+                        onRepsChange(((state.reps.toIntOrNull() ?: 0) - 1).coerceAtLeast(0))
+                    },
+                    onIncrement = {
+                        onRepsChange((state.reps.toIntOrNull() ?: 0) + 1)
+                    },
+                )
                 state.lastTime?.let {
                     Spacer(Modifier.height(12.dp))
                     Text("Last time: $it", style = LabelStyle, color = TideColors.TextFaint)
@@ -235,8 +253,16 @@ private fun Hairline() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(TideColors.Hairline))
 }
 
+/** Load steps 2.5 kg at a tap, the smallest plate change worth a button press. */
+private const val LoadStepKg = 2.5
+
 @Composable
-private fun Stepper(label: String, value: String) {
+private fun Stepper(
+    label: String,
+    value: String,
+    onDecrement: () -> Unit = {},
+    onIncrement: () -> Unit = {},
+) {
     Column {
         Text(label, style = LabelStyle, color = TideColors.TextFaint)
         Spacer(Modifier.height(9.dp))
@@ -245,7 +271,7 @@ private fun Stepper(label: String, value: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            StepButton("-")
+            StepButton("-", onDecrement)
             Box(
                 Modifier
                     .weight(1f)
@@ -261,20 +287,20 @@ private fun Stepper(label: String, value: String) {
                     color = TideColors.Text,
                 )
             }
-            StepButton("+")
+            StepButton("+", onIncrement)
         }
     }
 }
 
 @Composable
-private fun StepButton(label: String) {
+private fun StepButton(label: String, onClick: () -> Unit = {}) {
     Box(
         Modifier
             .size(56.dp)
             .clip(ContinuousCornerShape(16.dp))
             .background(Color.White.copy(alpha = 0.06f))
             .border(1.dp, TideColors.Hairline, ContinuousCornerShape(16.dp))
-            .clickable(role = Role.Button) {},
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, style = DataStyle, color = TideColors.TextMuted)

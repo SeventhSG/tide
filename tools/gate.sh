@@ -17,7 +17,7 @@ tracked_text() {
   git ls-files -z | while IFS= read -r -d '' f; do
     case "$f" in
       *.png|*.jpg|*.webp|*.ttf|*.otf|*.jar|*.keystore|*.jks|LICENSE) continue ;;
-      tools/gate.sh) continue ;;   # it names what it bans, so it cannot scan itself
+      tools/gate.sh|CLAUDE.md) continue ;;   # they name what is banned, so they cannot scan themselves
     esac
     [ -f "$f" ] || continue
     grep -Iq . "$f" 2>/dev/null && printf '%s\0' "$f"

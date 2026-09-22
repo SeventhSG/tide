@@ -70,7 +70,7 @@ private val navItems = listOf(
 )
 
 @Composable
-fun TodayScreen(modifier: Modifier = Modifier) {
+fun TodayScreen(modifier: Modifier = Modifier, onStartSession: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
     OceanBackground(modifier) {
         Column(Modifier.fillMaxSize()) {
@@ -102,7 +102,7 @@ fun TodayScreen(modifier: Modifier = Modifier) {
 
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TideButton(onClick = {}) {
+                    TideButton(onClick = onStartSession) {
                         Text(
                             "Start session",
                             style = MaterialTheme.typography.labelLarge,

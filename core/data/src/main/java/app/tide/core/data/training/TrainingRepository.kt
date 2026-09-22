@@ -39,6 +39,8 @@ class TrainingRepository(
     suspend fun searchExercises(q: String) =
         if (q.isBlank()) emptyList() else exercises.search(q)
 
+    suspend fun exerciseById(exerciseId: String): ExerciseEntity? = exercises.byId(exerciseId)
+
     // --- sessions ---------------------------------------------------------
 
     /**
@@ -135,6 +137,25 @@ class TrainingRepository(
                 durationSec = it.nextDurationSec,
             )
         }
+        val last = sessions.lastWorkingSets(exerciseId)
+        if (last.isEmpty()) return null
+        return Prescription(
+            loadKg = last.mapNotNull { it.loadKg }.maxOrNull(),
+            sets = last.size,
+            reps = last.mapNotNull { it.reps }.minOrNull() ?: 0,
+            durationSec = last.mapNotNull { it.durationSec }.minOrNull(),
+        )
+    }
+
+    /**
+     * What you actually did last time, regardless of what is prescribed next.
+     *
+     * Separate from [prescriptionFor], which prefers the stored decision and,
+     * once one exists, never reaches session history at all. The logger's
+     * "last time" reference needs the history itself, not the decision made
+     * from it.
+     */
+    suspend fun lastPerformance(exerciseId: String): Prescription? {
         val last = sessions.lastWorkingSets(exerciseId)
         if (last.isEmpty()) return null
         return Prescription(

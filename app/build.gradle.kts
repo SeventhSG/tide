@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.kotlinx.coroutines.core)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -68,4 +69,8 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.rule)
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    // For SessionViewModelTest: a real in-memory database, the same proof
+    // TrainingRepositoryTest gives the layer below it.
+    testImplementation(libs.room.runtime)
+    testImplementation(libs.androidx.test.core)
 }
