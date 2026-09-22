@@ -9,7 +9,14 @@ The data never leaves the phone. There is no account, no server and no sync. The
 optional: online means a connector refreshes when there is signal. Offline is the normal
 case, not the degraded one.
 
-Status: early. Nothing is installable yet.
+Status: **v0.1.0**, the training module. Installable, and honest about what is in it: the
+session logger with its progression engine, an exercise picker over a 38 lift starter set,
+a muscle map, a month of history, importers for FitNotes and Strong, and a daily summary
+that is off until you ask for it. Body, Money, Inbox and the assistant are not built yet.
+
+This build has never run on a physical phone. There is no usable emulator on the machine it
+was built on, so every screen was verified by rendering it on the JVM. The first person to
+install it is the first person to see it move.
 
 ---
 
