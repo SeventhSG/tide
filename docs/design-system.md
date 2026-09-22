@@ -54,9 +54,17 @@ Hex literals live in `:core:design` and nowhere else. A grep in CI enforces it.
 
 Two families, one rule each.
 
-- **Roboto Flex** for all text. It is the system variable font and what the Material 3
-  Expressive type scale is built on. Replacing it costs locale coverage and rendering quality
-  and buys very little.
+- **Manrope** for all text, bundled as a variable font. Smooth, slightly geometric, and it
+  holds up at small sizes on a dark ground.
+
+  Roboto Flex was the original choice, for being the system font. It was dropped because this
+  app is dark-first and Roboto's low-contrast strokes go flat against deep water. The system
+  font is the right default for an app that has no opinion; this one does.
+
+  Bundled rather than fetched through the Play Services downloadable-fonts provider, which
+  needs Play Services present and a network round trip, and falls back silently to the system
+  font when either is missing. An app whose premise is that it works with no network should
+  not have its typography depend on one. 500KB of TTF is a fair price for determinism.
 - **IBM Plex Mono** for every numeral, unit and data label, with tabular figures enabled.
   Weights change, columns do not.
 
@@ -120,10 +128,19 @@ it turns off:
 - A setting with three values: Full, Subtle (gradient only, no animation), Off (flat
   `surface`). Subtle is the default on devices reporting low RAM.
 
-**Implementation.** An AGSL `RuntimeShader` on API 33+, which keeps the whole thing on the
-GPU as one draw. Below 33, a pre-rendered gradient plus a static caustic texture, no
-animation. `tools/render_mock.py` holds the reference implementation of the look in Python
-and regenerates the image above; the shader has to match it, and that image is the target.
+**Implementation.** Compose drawing, not a shader.
+
+The first version was an AGSL `RuntimeShader`. It looked better and it was the wrong call:
+`RuntimeShader` needs API 33, so most of the effect vanished on older devices, and the JVM
+renderer does not execute AGSL, so the background could not be screenshot-tested at all. It
+now runs everywhere down to minSdk 26 and renders in tests, which is worth more than the
+extra fidelity.
+
+Light shafts are drawn as bell-weighted sub-bands rather than one parallelogram each. A
+single path gives hard diagonal edges, and a hard edge reads as a shape rather than as light.
+
+`tools/render_mock.py` holds a reference implementation of the look and regenerates the image
+above. `core/design/src/main/java/app/tide/core/design/Ocean.kt` is the real one.
 
 ## Materiality
 

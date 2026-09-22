@@ -68,6 +68,12 @@ The mark is one tidal cycle drawn against a chart datum, which is how a tide is 
 plotted and also how this app reads a life: the line matters less than where it sits
 relative to the level.
 
+## Building
+
+Toolchain paths, commands and the screenshot pipeline are in
+[docs/building.md](docs/building.md). There is no usable emulator on the dev machine;
+screenshots come from Roborazzi on the JVM.
+
 ## Stack
 
 Kotlin, Jetpack Compose, Material 3 Expressive, Room, WorkManager, Health Connect. The
