@@ -76,17 +76,9 @@ muscle counts at half, and the 1RM is an Epley estimate.
 No body silhouette. A drawn figure implies the app knows where a muscle sits and how much of
 it was worked. It knows volume attributed by a declared convention, so it shows a list.
 
-## Next
-
-**Retroactive logging as an action.** The flag exists and the importer sets it, but there is
-no way yet to log a session you did yesterday from inside the app.
-
-**An exercise picker.** The logger opens on a hardcoded squat, because choosing a lift needs
-either routines or a browsable library and neither screen exists.
-
-**3. Schedule and notify.** Both modules are built and tested. `:core:schedule` holds
-recurrence, occurrences and the reconciler; `:core:notify` holds tiers, channels, quiet
-hours, the digest and the ledger.
+**3. Schedule and notify, the modules.** `:core:schedule` holds recurrence, occurrences and
+the reconciler; `:core:notify` holds tiers, channels, quiet hours, the digest and the ledger.
+Both are tested and neither is wired to a screen yet.
 
 The notification stance, written down because it is easy to erode: an interruption has a
 cost and the app pays it. The default is a quiet daily digest, `Default` waits for quiet
@@ -94,9 +86,73 @@ hours to end, and only `Urgent` may break them. There are no engagement notifica
 there never will be: nothing here says you have not opened the app, nothing congratulates a
 streak, and nothing is sent to bring you back.
 
-**Not yet wired to anything.** There is no settings screen for quiet hours, no WorkManager
-job posting the digest, and no rule editor. The modules decide correctly and nothing calls
-them yet.
+## Next
+
+### Before v0.1.0
+
+Checked on 2026-09-22 and found not usable yet. A version tag claims "this runs and does what
+it says", and four things currently make that untrue. These come first, before anything new.
+
+1. **Finish a session.** `finishSession` is called nowhere in `:app`, and it is the function
+   that runs progression. In the built APK the engine this app exists for never fires.
+2. **An exercise picker.** 38 exercises are seeded, but the logger opens on a hardcoded squat
+   and there is no way to reach the other 37.
+3. **Today shows real numbers or none.** Volume, sleep, heart rate, renewals, backup and the
+   week strip are all hardcoded. Shipping them breaks the rule that a number is real, labelled
+   as sample data, or absent. Volume can come from the database now; the rest has no source
+   until Body and Money exist, so those rows go until then.
+4. **Launched once on a real phone.** Nothing has ever started `MainActivity`. Roborazzi
+   renders screens, it does not prove the app opens. This step needs a person and a USB cable.
+
+### The full exercise library, with images
+
+All of it, not 38. Roughly 1,300 exercises with their muscles and equipment, seeded as an
+asset, and **an image for each**.
+
+The images are the part with a condition attached, and it is written here so it is not
+quietly dropped later:
+
+- **The source must have a licence that permits redistribution in an Apache-2.0 app, checked
+  in the source's own licence file.** Popularity is not a licence. Images being widely used is
+  evidence that they are popular, not that they are licensed, and an app shipping media it has
+  no right to is an app that gets taken down.
+- **openGym's media is out.** Its own notice records that the animation rights are unresolved.
+  openGym is also AGPL, so neither its data nor its media may be copied into Tide regardless.
+- **Several datasets are all called "ExerciseDB"** and they do not share a licence. One is a
+  commercial API. The name is not enough; the specific repository and its licence are.
+- **Bundled, never hotlinked.** The app is offline and keeps no telemetry. Fetching images from
+  someone's CDN would break offline use and tell a third party which exercises you look at.
+- **Measure the size before choosing a format.** A thousand animations and a thousand stills
+  cost very different amounts of APK. Pick the format after measuring, not before.
+
+If no source clears the licence check, the library ships with metadata only and images wait.
+
+### A weekly planner
+
+Decide which day is which: Monday is push, Wednesday is pull, Friday is legs, the rest are rest.
+Then Today knows what is planned, starting a session opens that day's exercises, and the
+hardcoded squat disappears on its own.
+
+Half of this exists already. `RoutineEntity` and `RoutineExerciseEntity` are in the schema with
+a `dayIndex` per exercise, and have been since version 1. What is missing is every screen.
+
+Two shapes of plan, because people train both ways:
+
+- **Fixed days.** Push on Monday, whatever happens. A `Weekly` rule in `:core:schedule`.
+- **A rotation.** Push, pull, legs, in order, three times a week, on whichever days you get to
+  the gym. A `TimesPerWeek` quota. Most schedulers cannot express this, and it is the one that
+  stops the app telling you that you missed Monday when you train Tuesday.
+
+A plan becomes schedule rules, so the reconciler resolves each day from the logged session
+without asking. Moving a day never reorders the week.
+
+### Also waiting
+
+**Retroactive logging as an action.** The flag exists and the importer sets it, but there is
+no way yet to log a session you did yesterday from inside the app.
+
+**Wiring Phase 3.** No settings screen for quiet hours, no WorkManager job posting the digest,
+and no rule editor. The modules decide correctly and nothing calls them yet.
 
 ## Then
 
@@ -136,6 +192,3 @@ without a model at all. Then the engine. Then the chat surface.
 - **Sync across devices.** It would require a server, and the absence of a server is the
   product.
 - **A Play Store release.** The notification listener alone would need a policy answer first.
-- **The full 1,300-exercise library.** The starter set of 38 is enough to train on. The
-  ExerciseDB metadata (MIT) comes later as a seeded asset. No exercise media, ever: its
-  rights are unresolved.

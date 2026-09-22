@@ -104,5 +104,14 @@ The training module's design was informed by [openGym](https://gitlab.com/Duarte
 which is **AGPL-3.0**. Its behaviour was studied and reimplemented. **No openGym code is
 used here**, and none may be: Tide is Apache-2.0 and copying would force a licence change.
 
-Exercise metadata will come from the MIT-licensed ExerciseDB set. **No exercise media, ever**:
-openGym's own notice records that the animation rights are unresolved.
+**Exercise data and images need a verified licence.** Both are wanted, the full library and an
+image per exercise, but nothing goes in until the licence has been read in the source's own
+licence file and it permits redistribution in an Apache-2.0 app.
+
+- **openGym's media is out.** Its own notice records that the animation rights are
+  unresolved. Images being widely used shows they are popular, not that they are licensed.
+- **"ExerciseDB" is not one thing.** Several datasets share the name and not all are open;
+  one is a commercial API. Check the specific repository, not the name.
+- **Bundled, never hotlinked.** Fetching from a third-party CDN breaks offline use and tells
+  someone else which exercises you look at.
+- If no source clears the check, ship metadata only and leave images for later.
