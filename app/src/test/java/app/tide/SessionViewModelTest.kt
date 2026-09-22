@@ -139,4 +139,69 @@ class SessionViewModelTest {
         assertEquals("102.5", state.loadKg)
         assertEquals("5", state.reps)
     }
+
+    @Test
+    fun `finishing runs progression and says what it decided`() {
+        vm = SessionViewModel(squat.id, repo, scope, now = { clock })
+        awaitState { it.exerciseName.isNotEmpty() }
+
+        vm.onLoadChange(100.0)
+        vm.onRepsChange(5)
+        repeat(3) { i ->
+            vm.onLogSet()
+            awaitState { it.logged.size == i + 1 }
+        }
+        clock += 45 * 60 * 1000
+
+        vm.onFinishRequested()
+        assertTrue(awaitState { it.confirmingFinish }.confirmingFinish)
+        vm.onFinishConfirmed()
+        // A second tap while the first is in flight must not finish twice.
+        vm.onFinishConfirmed()
+
+        val summary = requireNotNull(awaitState { it.summary != null }.summary)
+        assertTrue(summary.saved)
+        assertEquals("45 MIN", summary.duration)
+        assertEquals(3, summary.workingSets)
+        assertEquals(1, summary.exercises.size)
+        assertEquals("Back squat", summary.exercises[0].exerciseName)
+        assertEquals("102.5 kg, 3 x 5", summary.exercises[0].next)
+
+        val stored = runBlocking { repo.prescriptionFor(squat.id) }
+        assertEquals(
+            "the engine must have written its decision, and only once",
+            102.5,
+            stored!!.loadKg!!,
+            0.001,
+        )
+        assertEquals(null, runBlocking { repo.observeActiveSession().first() })
+    }
+
+    @Test
+    fun `keep going leaves the session open`() {
+        vm = SessionViewModel(squat.id, repo, scope, now = { clock })
+        awaitState { it.exerciseName.isNotEmpty() }
+
+        vm.onFinishRequested()
+        awaitState { it.confirmingFinish }
+        vm.onFinishCancelled()
+
+        val state = awaitState { !it.confirmingFinish }
+        assertEquals(null, state.summary)
+        assertTrue(runBlocking { repo.observeActiveSession().first() } != null)
+    }
+
+    @Test
+    fun `finishing an empty session discards it`() {
+        vm = SessionViewModel(squat.id, repo, scope, now = { clock })
+        awaitState { it.exerciseName.isNotEmpty() }
+
+        vm.onFinishRequested()
+        vm.onFinishConfirmed()
+
+        val summary = requireNotNull(awaitState { it.summary != null }.summary)
+        assertEquals(false, summary.saved)
+        assertTrue(summary.exercises.isEmpty())
+        assertEquals(null, runBlocking { repo.observeActiveSession().first() })
+    }
 }

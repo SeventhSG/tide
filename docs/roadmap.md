@@ -10,7 +10,7 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 185 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
+| Tests | 192 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
 | Screens rendering | Today, Session logger |
 | Screens wired to data | Session logger, Import, Muscle map |
 
@@ -76,6 +76,13 @@ muscle counts at half, and the 1RM is an Epley estimate.
 No body silhouette. A drawn figure implies the app knows where a muscle sits and how much of
 it was worked. It knows volume attributed by a declared convention, so it shows a list.
 
+**Finishing a session.** The logger has a Finish control, placed in the header and away from
+the thumb, since it is pressed once a session and Log set a hundred times. It asks once, then
+runs the engine and shows what it decided, in the engine's own words, with next time's
+target. Finishing is enforced to happen once: a second finish decides nothing, so a double
+tap cannot add the increment twice. A session with nothing in it is deleted rather than
+recorded, because opening the logger and backing out is not a workout.
+
 **3. Schedule and notify, the modules.** `:core:schedule` holds recurrence, occurrences and
 the reconciler; `:core:notify` holds tiers, channels, quiet hours, the digest and the ledger.
 Both are tested and neither is wired to a screen yet.
@@ -91,10 +98,9 @@ streak, and nothing is sent to bring you back.
 ### Before v0.1.0
 
 Checked on 2026-09-22 and found not usable yet. A version tag claims "this runs and does what
-it says", and four things currently make that untrue. These come first, before anything new.
+it says", and four things made that untrue. These come first, before anything new.
 
-1. **Finish a session.** `finishSession` is called nowhere in `:app`, and it is the function
-   that runs progression. In the built APK the engine this app exists for never fires.
+1. ~~**Finish a session.**~~ Done, see above.
 2. **An exercise picker.** 38 exercises are seeded, but the logger opens on a hardcoded squat
    and there is no way to reach the other 37.
 3. **Today shows real numbers or none.** Volume, sleep, heart rate, renewals, backup and the

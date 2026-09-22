@@ -71,16 +71,30 @@ class TrainingRepository(
      *
      * This is the moment the app earns its keep, so it happens once, here, and
      * not scattered across screens.
+     *
+     * Once is enforced, not assumed. A session that has already ended returns
+     * nothing and changes nothing, because a double tap on Finish that ran the
+     * engine twice would add the increment twice and prescribe a weight nobody
+     * earned.
+     *
+     * A session with no sets in it is deleted rather than ended. Opening the
+     * logger and backing out is not a workout, and keeping the row would show up
+     * later as a session that happened.
      */
-    suspend fun finishSession(sessionId: String, defaultRule: ProgressionRule): List<ProgressionResult> {
+    suspend fun finishSession(sessionId: String, defaultRule: ProgressionRule): List<ExerciseProgression> {
         val session = sessions.byId(sessionId) ?: return emptyList()
+        if (session.endedAt != null) return emptyList()
         val sets = sessions.setsFor(sessionId)
+        if (sets.isEmpty()) {
+            sessions.delete(sessionId)
+            return emptyList()
+        }
         sessions.upsert(session.copy(endedAt = now()))
 
-        val results = mutableListOf<ProgressionResult>()
+        val results = mutableListOf<ExerciseProgression>()
         sets.map { it.exerciseId }.distinct().forEach { exerciseId ->
             val result = applyProgression(exerciseId, sets, defaultRule)
-            if (result != null) results += result
+            if (result != null) results += ExerciseProgression(exerciseId, result)
         }
         return results
     }
@@ -247,6 +261,12 @@ class TrainingRepository(
     }
 
 }
+
+/** The decision made for one exercise when a session finished. */
+data class ExerciseProgression(
+    val exerciseId: String,
+    val result: ProgressionResult,
+)
 
 /**
  * Estimated one-rep max.

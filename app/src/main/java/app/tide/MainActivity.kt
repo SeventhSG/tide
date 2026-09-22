@@ -112,6 +112,10 @@ private fun WiredSessionScreen(
         onLoadChange = viewModel::onLoadChange,
         onRepsChange = viewModel::onRepsChange,
         onLogSet = viewModel::onLogSet,
+        onFinishRequested = viewModel::onFinishRequested,
+        onFinishCancelled = viewModel::onFinishCancelled,
+        onFinishConfirmed = viewModel::onFinishConfirmed,
+        onDone = onBack,
     )
 }
 

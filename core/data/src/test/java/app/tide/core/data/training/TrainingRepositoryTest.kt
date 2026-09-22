@@ -6,6 +6,7 @@ import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.Muscle
 import app.tide.core.data.db.SetKind
 import app.tide.core.data.db.TideDatabase
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -77,11 +78,37 @@ class TrainingRepositoryTest {
 
         val results = repo.finishSession(s, rule)
         assertEquals(1, results.size)
-        assertEquals(102.5, results[0].next.loadKg)
+        assertEquals(102.5, results[0].result.next.loadKg)
 
         val next = repo.prescriptionFor(squat.id)
         assertNotNull(next)
         assertEquals("the decision must survive into the database", 102.5, next!!.loadKg)
+    }
+
+    @Test
+    fun `finishing twice progresses once`() = runTest {
+        val s = repo.startSession()
+        repeat(3) { repo.logSet(s, squat.id, loadKg = 100.0, reps = 5) }
+
+        repo.finishSession(s, rule)
+        val second = repo.finishSession(s, rule)
+
+        assertEquals("a second finish must decide nothing", 0, second.size)
+        assertEquals(
+            "a double tap must not add the increment twice",
+            102.5,
+            repo.prescriptionFor(squat.id)!!.loadKg,
+        )
+    }
+
+    @Test
+    fun `an empty session is removed, not recorded`() = runTest {
+        val s = repo.startSession()
+        val results = repo.finishSession(s, rule)
+
+        assertEquals(0, results.size)
+        assertNull("opening the logger and leaving is not a workout", db.sessions().byId(s))
+        assertNull(repo.observeActiveSession().first())
     }
 
     @Test
@@ -128,7 +155,7 @@ class TrainingRepositoryTest {
         assertEquals(
             "the stall count must survive the round trip or a deload never fires",
             true,
-            results[0].deloaded,
+            results[0].result.deloaded,
         )
         assertEquals(92.25, repo.prescriptionFor(squat.id)!!.loadKg)
     }

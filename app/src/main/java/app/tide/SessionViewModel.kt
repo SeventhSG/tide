@@ -2,6 +2,7 @@ package app.tide
 
 import app.tide.core.data.db.SetKind
 import app.tide.core.data.db.WorkoutSetEntity
+import app.tide.core.data.training.Prescription
 import app.tide.core.data.training.ProgressionRule
 import app.tide.core.data.training.RuleCodec
 import app.tide.core.data.training.TrainingRepository
@@ -43,6 +44,10 @@ class SessionViewModel(
     private var loadKg: Double? = null
     private var reps = 0
     private var latestSets: List<WorkoutSetEntity> = emptyList()
+    private var sessionSets: List<WorkoutSetEntity> = emptyList()
+    private var confirmingFinish = false
+    private var finishing = false
+    private var summary: SessionSummary? = null
 
     init {
         scope.launch {
@@ -66,6 +71,7 @@ class SessionViewModel(
             render()
 
             repository.observeSets(id).collect { sets ->
+                sessionSets = sets
                 latestSets = sets.filter { it.exerciseId == exerciseId }
                 render()
             }
@@ -94,6 +100,51 @@ class SessionViewModel(
         }
     }
 
+    fun onFinishRequested() {
+        if (sessionId == null || summary != null) return
+        confirmingFinish = true
+        render()
+    }
+
+    fun onFinishCancelled() {
+        confirmingFinish = false
+        render()
+    }
+
+    /**
+     * Ends the session and runs progression, once.
+     *
+     * [finishing] stops a second tap from launching a second finish while the
+     * first is still in the database. The repository refuses a second finish
+     * as well; this just keeps the screen from asking.
+     */
+    fun onFinishConfirmed() {
+        val id = sessionId ?: return
+        if (finishing || summary != null) return
+        finishing = true
+        val endedAt = now()
+        val workingSets = sessionSets.count { it.countsTowardProgression }
+        val anySets = sessionSets.isNotEmpty()
+        scope.launch {
+            val decisions = repository.finishSession(id, defaultRule)
+            summary = SessionSummary(
+                duration = formatDuration(endedAt - startedAt),
+                workingSets = workingSets,
+                saved = anySets,
+                exercises = decisions.map { d ->
+                    SessionSummary.Decision(
+                        exerciseName = repository.exerciseById(d.exerciseId)?.name ?: d.exerciseId,
+                        reason = d.result.reason,
+                        next = formatPrescription(d.result.next),
+                    )
+                },
+            )
+            confirmingFinish = false
+            finishing = false
+            render()
+        }
+    }
+
     private fun render() {
         val (logged, nextSetNumber) = buildLogged(latestSets)
         _state.value = SessionUiState(
@@ -107,6 +158,10 @@ class SessionViewModel(
             elapsed = formatElapsed(now() - startedAt),
             restRemaining = null,
             logged = logged,
+            sessionSetCount = sessionSets.size,
+            workingSetCount = sessionSets.count { it.countsTowardProgression },
+            confirmingFinish = confirmingFinish,
+            summary = summary,
         )
     }
 
@@ -165,6 +220,26 @@ private fun formatElapsed(ms: Long): String {
     val m = (totalSec % 3600) / 60
     val s = totalSec % 60
     return "%02d:%02d:%02d".format(h, m, s)
+}
+
+/**
+ * Whole minutes. The seconds are on the logger's clock while it runs; once the
+ * session is over, nobody needs to know it was 42:18 rather than 42 minutes.
+ */
+private fun formatDuration(ms: Long): String {
+    val minutes = (ms / 60_000).coerceAtLeast(0)
+    return when {
+        minutes < 1 -> "UNDER A MINUTE"
+        minutes < 60 -> "$minutes MIN"
+        else -> "${minutes / 60} H ${minutes % 60} MIN"
+    }
+}
+
+/** "102.5 kg, 3 x 5". Sets first when there is no load, since that is all there is. */
+private fun formatPrescription(p: Prescription): String {
+    val work = if (p.durationSec != null) "${p.durationSec}s" else "${p.reps}"
+    val volume = "${p.sets} x $work"
+    return p.loadKg?.let { "${trimNumber(it)} kg, $volume" } ?: volume
 }
 
 /** Whole kilos print as whole kilos. The precision past that is not real. */

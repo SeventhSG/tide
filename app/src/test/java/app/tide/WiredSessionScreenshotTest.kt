@@ -147,4 +147,56 @@ class WiredSessionScreenshotTest {
         }
         compose.onRoot().captureRoboImage("build/screenshots/session-wired-empty.png")
     }
+
+    private fun logThreeSetsOfRow(vm: SessionViewModel) {
+        val sessionId = runBlocking { repo.startSession() }
+        runBlocking {
+            repo.logSet(sessionId, row.id, SetKind.WarmUp, loadKg = 60.0, reps = 8)
+            repo.logSet(sessionId, row.id, loadKg = 82.5, reps = 8, rir = 2)
+            repo.logSet(sessionId, row.id, loadKg = 82.5, reps = 7, rir = 1)
+        }
+        awaitState(vm) { it.logged.size == 3 }
+    }
+
+    @Test
+    fun sessionConfirmFinish() {
+        val vm = SessionViewModel(row.id, repo, scope, now = { clock })
+        awaitState(vm) { it.exerciseName.isNotEmpty() }
+        logThreeSetsOfRow(vm)
+        vm.onFinishRequested()
+        awaitState(vm) { it.confirmingFinish }
+
+        val state = vm.state.value
+        compose.setContent {
+            TideTheme {
+                Box(Modifier.size(411.dp, 891.dp)) {
+                    SessionScreen(state)
+                }
+            }
+        }
+        compose.onRoot().captureRoboImage("build/screenshots/session-confirm-finish.png")
+    }
+
+    @Test
+    fun sessionFinished() {
+        // The summary as the engine wrote it. The reason and the next target
+        // are the engine's own output, so this picture is its decision.
+        val vm = SessionViewModel(row.id, repo, scope, now = { clock })
+        awaitState(vm) { it.exerciseName.isNotEmpty() }
+        logThreeSetsOfRow(vm)
+        clock += 38 * 60 * 1000
+        vm.onFinishRequested()
+        vm.onFinishConfirmed()
+        awaitState(vm) { it.summary != null }
+
+        val state = vm.state.value
+        compose.setContent {
+            TideTheme {
+                Box(Modifier.size(411.dp, 891.dp)) {
+                    SessionScreen(state)
+                }
+            }
+        }
+        compose.onRoot().captureRoboImage("build/screenshots/session-finished.png")
+    }
 }

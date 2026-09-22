@@ -160,8 +160,8 @@ class TrainingImporterTest {
         val results = repo.finishSession(s, ProgressionRule.Linear(2.5))
 
         assertEquals(1, results.size)
-        assertEquals("hitting the imported target advances it", 62.5, results[0].next.loadKg!!, 0.001)
-        assertEquals(false, results[0].deloaded)
+        assertEquals("hitting the imported target advances it", 62.5, results[0].result.next.loadKg!!, 0.001)
+        assertEquals(false, results[0].result.deloaded)
     }
 
     @Test

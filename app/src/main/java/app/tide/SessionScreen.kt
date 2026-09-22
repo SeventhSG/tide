@@ -37,6 +37,7 @@ import app.tide.core.design.OceanBackground
 import app.tide.core.design.OceanIntensity
 import app.tide.core.design.TideButton
 import app.tide.core.design.TideColors
+import app.tide.core.design.TideGhostButton
 import app.tide.core.design.TideTheme
 
 /**
@@ -72,12 +73,37 @@ data class SessionUiState(
     val elapsed: String,
     val restRemaining: String?,
     val logged: List<LoggedSet>,
+    /** Every set in the session, any exercise, warm-ups included. */
+    val sessionSetCount: Int = 0,
+    /** The sets in the session that can move a target. */
+    val workingSetCount: Int = 0,
+    val confirmingFinish: Boolean = false,
+    /** Set once the session has finished. The screen then shows only this. */
+    val summary: SessionSummary? = null,
 ) {
     data class LoggedSet(
         val index: String,
         val summary: String,
         val rir: String?,
         val isWarmUp: Boolean,
+    )
+}
+
+/**
+ * What finishing decided. Every line comes from the progression engine: the
+ * reason is its own plain-language explanation, not copy written here.
+ */
+data class SessionSummary(
+    val duration: String,
+    val workingSets: Int,
+    /** False when nothing was logged and the session was discarded. */
+    val saved: Boolean,
+    val exercises: List<Decision>,
+) {
+    data class Decision(
+        val exerciseName: String,
+        val reason: String,
+        val next: String,
     )
 }
 
@@ -88,10 +114,18 @@ fun SessionScreen(
     onLoadChange: (Double) -> Unit = {},
     onRepsChange: (Int) -> Unit = {},
     onLogSet: () -> Unit = {},
+    onFinishRequested: () -> Unit = {},
+    onFinishCancelled: () -> Unit = {},
+    onFinishConfirmed: () -> Unit = {},
+    onDone: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // The ocean is off here, deliberately. See the note above.
     OceanBackground(modifier, intensity = OceanIntensity.Off) {
+        state.summary?.let {
+            SummaryContent(it, onDone)
+            return@OceanBackground
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -113,6 +147,21 @@ fun SessionScreen(
                 }
                 Spacer(Modifier.weight(1f))
                 Text(state.elapsed, style = LabelStyle, color = TideColors.TextFaint)
+                Spacer(Modifier.width(12.dp))
+                // Up here, away from the thumb. Finishing happens once a session
+                // and logging a hundred times, so the two never share a reach.
+                Box(
+                    Modifier
+                        .height(44.dp)
+                        .clip(ContinuousCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.06f))
+                        .border(1.dp, TideColors.Hairline, ContinuousCornerShape(14.dp))
+                        .clickable(role = Role.Button, onClick = onFinishRequested)
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("FINISH", style = LabelStyle, color = TideColors.Text)
+                }
             }
 
             Text(
@@ -219,12 +268,16 @@ fun SessionScreen(
             }
 
             Spacer(Modifier.weight(1f))
-            TideButton(onClick = onLogSet, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "Log set ${state.setNumber}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = TideColors.OnAccent,
-                )
+            if (state.confirmingFinish) {
+                ConfirmFinish(state.sessionSetCount, state.workingSetCount, onFinishCancelled, onFinishConfirmed)
+            } else {
+                TideButton(onClick = onLogSet, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Log set ${state.setNumber}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TideColors.OnAccent,
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
             Text(
@@ -236,6 +289,115 @@ fun SessionScreen(
             )
             Spacer(Modifier.height(20.dp))
         }
+    }
+}
+
+/**
+ * Asked once, because finishing is the one tap here that cannot be undone: it
+ * runs the engine and sets every lift's next target.
+ */
+@Composable
+private fun ConfirmFinish(setCount: Int, workingCount: Int, onCancel: () -> Unit, onConfirm: () -> Unit) {
+    Card {
+        Text(
+            "Finish this session?",
+            style = MaterialTheme.typography.titleMedium,
+            color = TideColors.Text,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            // Counted in working sets, because those are what set a target.
+            // A warm-up counted here would promise a decision it cannot make.
+            when {
+                setCount == 0 -> "Nothing is logged yet, so finishing discards it."
+                workingCount == 0 -> "Only warm-ups so far. They are kept, and they move no target."
+                workingCount == 1 -> "1 working set logged. Next targets are set from it."
+                else -> "$workingCount working sets logged. Next targets are set from them."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = TideColors.TextMuted,
+        )
+    }
+    Spacer(Modifier.height(12.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        TideGhostButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+            Text("Keep going", style = MaterialTheme.typography.labelLarge, color = TideColors.Text)
+        }
+        TideButton(onClick = onConfirm, modifier = Modifier.weight(1f)) {
+            Text("Finish", style = MaterialTheme.typography.labelLarge, color = TideColors.OnAccent)
+        }
+    }
+}
+
+@Composable
+private fun SummaryContent(summary: SessionSummary, onDone: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp),
+    ) {
+        Spacer(Modifier.height(52.dp))
+        Text(
+            if (summary.saved) "Session done" else "Nothing logged",
+            style = MaterialTheme.typography.titleLarge,
+            color = TideColors.Text,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            if (summary.saved) {
+                val sets = if (summary.workingSets == 1) "1 WORKING SET" else "${summary.workingSets} WORKING SETS"
+                "${summary.duration}, $sets"
+            } else {
+                summary.duration
+            },
+            style = LabelStyle,
+            color = TideColors.TextFaint,
+        )
+        Spacer(Modifier.height(16.dp))
+
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when {
+                !summary.saved -> Card {
+                    Text(
+                        "The session was empty, so it was not kept.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TideColors.TextMuted,
+                    )
+                }
+                summary.exercises.isEmpty() -> Card {
+                    Text(
+                        "Only warm-ups were logged. They are kept, and they never move a target.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TideColors.TextMuted,
+                    )
+                }
+                else -> summary.exercises.forEach { d ->
+                    Card {
+                        Text(d.exerciseName, style = MaterialTheme.typography.titleMedium, color = TideColors.Text)
+                        Spacer(Modifier.height(4.dp))
+                        Text(d.reason, style = MaterialTheme.typography.bodyMedium, color = TideColors.TextMuted)
+                        Spacer(Modifier.height(12.dp))
+                        Hairline()
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("NEXT TIME", style = LabelStyle, color = TideColors.TextFaint)
+                            Spacer(Modifier.weight(1f))
+                            Text(d.next, style = DataStyle, color = TideColors.Accent)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        TideButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+            Text("Done", style = MaterialTheme.typography.labelLarge, color = TideColors.OnAccent)
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
 

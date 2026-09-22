@@ -82,6 +82,9 @@ interface SessionDao {
 
     @Upsert suspend fun upsert(s: SessionEntity)
 
+    @Query("DELETE FROM session WHERE id = :id")
+    suspend fun delete(id: String)
+
     @Query("SELECT * FROM workout_set WHERE sessionId = :sessionId ORDER BY orderInSession")
     fun observeSets(sessionId: String): Flow<List<WorkoutSetEntity>>
 
