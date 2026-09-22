@@ -63,6 +63,7 @@ fun SettingsScreen(
     onToggleSound: () -> Unit = {},
     onSoundQuieter: () -> Unit = {},
     onSoundLouder: () -> Unit = {},
+    onToggleSleepGuard: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     OceanBackground(modifier, intensity = OceanIntensity.Subtle) {
@@ -166,6 +167,20 @@ fun SettingsScreen(
                     Spacer(Modifier.height(10.dp))
                     TimeRow("TO", state.quietEnd, onQuietEndEarlier, onQuietEndLater)
                 }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Card {
+                Toggle("SLEEP GUARD", state.sleepGuardEnabled, onToggleSleepGuard)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "A couple of reminders as ${state.quietStart} approaches, and one more " +
+                        "direct alert if the phone is still on after it. The alert is the " +
+                        "one thing here allowed to break quiet hours, because protecting " +
+                        "them is the whole point of it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TideColors.TextMuted,
+                )
             }
 
             Spacer(Modifier.height(10.dp))
@@ -319,6 +334,7 @@ private fun SettingsPreview() {
                 quietStart = "22:00",
                 quietEnd = "07:00",
                 permissionGranted = false,
+                sleepGuardEnabled = true,
             ),
         )
     }

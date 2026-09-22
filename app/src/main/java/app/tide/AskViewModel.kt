@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 
 /**
@@ -36,27 +37,34 @@ class AskViewModel(
         if (installJob?.isActive == true) return
         installJob = scope.launch {
             _state.value = _state.value.copy(installing = true, error = null, progress = 0f)
-            installer.install().collect { update ->
-                _state.value = when (update) {
-                    is InstallState.Progress -> _state.value.copy(
-                        installing = true,
-                        progress = update.fraction,
-                        downloadedLabel = "${update.bytes / MB} MB of ${update.totalBytes / MB} MB",
-                    )
+            installer.install()
+                // Belt and braces: [ModelInstaller] already converts every
+                // failure it can name into [InstallState.Failed], but a screen
+                // must never crash on a download, so anything that still slips
+                // through becomes one more Failed state rather than an
+                // uncaught exception reaching this coroutine.
+                .catch { emit(InstallState.Failed("Something went wrong. Nothing was kept.")) }
+                .collect { update ->
+                    _state.value = when (update) {
+                        is InstallState.Progress -> _state.value.copy(
+                            installing = true,
+                            progress = update.fraction,
+                            downloadedLabel = "${update.bytes / MB} MB of ${update.totalBytes / MB} MB",
+                        )
 
-                    is InstallState.Done -> _state.value.copy(
-                        installing = false,
-                        installed = true,
-                        progress = 1f,
-                        downloadedLabel = "${update.bytes / MB} MB on this phone",
-                    )
+                        is InstallState.Done -> _state.value.copy(
+                            installing = false,
+                            installed = true,
+                            progress = 1f,
+                            downloadedLabel = "${update.bytes / MB} MB on this phone",
+                        )
 
-                    is InstallState.Failed -> _state.value.copy(
-                        installing = false,
-                        error = update.reason,
-                    )
+                        is InstallState.Failed -> _state.value.copy(
+                            installing = false,
+                            error = update.reason,
+                        )
+                    }
                 }
-            }
         }
     }
 

@@ -52,7 +52,8 @@ object Tide {
                 .build()
                 .also {
                     database = it
-                    scope.launch { seedIfEmpty(it) }
+                    val appContext = context.applicationContext
+                    scope.launch { seedIfEmpty(appContext, it) }
                 }
         }
 
@@ -99,22 +100,37 @@ object Tide {
     fun importer(context: Context): TrainingImporter =
         db(context).let { TrainingImporter(exercises = it.exercises(), sessions = it.sessions()) }
 
-    private suspend fun seedIfEmpty(db: TideDatabase) {
-        if (db.exercises().byName("Back squat") != null) return
-        db.exercises().upsertAll(StarterLibrary.exercises)
+    /**
+     * Two independent gates, not one.
+     *
+     * [StarterLibrary] and [ExerciseDataset] are seeded on separate checks so
+     * that an app already carrying the 38 curated exercises still picks up
+     * the full library on the update that adds it, rather than the older
+     * sentinel skipping seeding entirely. Each gate checks for one exercise
+     * it alone would have written.
+     */
+    private suspend fun seedIfEmpty(context: Context, db: TideDatabase) {
+        if (db.exercises().byName("Back squat") == null) {
+            db.exercises().upsertAll(StarterLibrary.exercises)
+        }
+        if (db.exercises().byId("ds-0001") == null) {
+            // Never allowed to take the app down: a missing or corrupt asset
+            // costs the extra library, not the launch, and the same check
+            // retries on the next process start.
+            runCatching { ExerciseDataset.loadFromAssets(context) }
+                .onSuccess { db.exercises().upsertAll(it) }
+        }
     }
 }
 
 /**
- * A starter exercise library.
+ * The 38 exercises with a hand-chosen progression rule.
  *
- * Deliberately small. The full ExerciseDB set is roughly 1,300 entries and will
- * be bundled as a seeded asset later; this is enough to train on from the first
- * launch without a browsing screen existing yet.
- *
- * Default progression rules are set per exercise because the right rule depends
- * on the lift: compound barbell work progresses linearly, accessories respond
- * better to a rep range, and bodyweight work cannot be loaded in small steps.
+ * The other 1,311 come from [ExerciseDataset] with no rule assigned, falling
+ * back to whatever the routine defaults to. These 38 are the ones common
+ * enough to be worth the opposite: compound barbell work progresses linearly,
+ * accessories respond better to a rep range, and bodyweight work cannot be
+ * loaded in small steps, so each gets the rule that actually fits it.
  */
 private object StarterLibrary {
 

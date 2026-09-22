@@ -9,8 +9,8 @@ planned. Where the two diverged, the divergence is written down with the reason.
 
 | | |
 |---|---|
-| Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 245 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
+| Builds | `app-debug.apk`, 13 MB, minSdk 26, targetSdk 35 |
+| Tests | 293 green, including 30 schedule and reconciler, 32 notify, and 3 on the migrations |
 | Screens rendering | Today, Train, Body, Money, Ask, logger, picker, planner, history, settings |
 | Screens wired to data | Today, Train, Body, Ask, logger, picker, planner, history, import, muscle map |
 
@@ -159,6 +159,40 @@ and leave the screen showing a plan that no longer existed. Both the planner and
 now serialise their reads behind a mutex, which is cheap and removes the class of bug rather
 than the instance.
 
+**v0.1.2, fixing what shipped broken and the full library's metadata.** Four bugs from
+v0.1.1, found by actually using it rather than by a test, which is its own note: **Today
+carried two bottom bars.** A leftover `LiquidGlassNav` inside the Today composable, from
+before `TideScaffold` existed, stacked under the scaffold's own one. **The boot wave never
+showed.** It and the real app were mounted at once, and the app, composed second, drew on
+top of it for the wave's entire run: the animation was playing, just never visible. Fixed by
+making them exclusive. **Installing the model in Ask crashed.** `connection.responseCode` sat
+outside the `try`, so a missing `INTERNET` permission (never declared) or any network hiccup
+threw straight out of the flow with nothing downstream to catch it. **Connect Health Connect
+did nothing.** The `android.permission.health.*` permissions Health Connect requires were
+never declared, so the permission sheet had nothing to grant.
+
+**The exercise library is 1,311 exercises now, not 38.** Metadata only, on purpose, and the
+reason is worth being exact about: [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset)
+splits its own licence in two. The names, body parts, equipment, targets and instructions are
+MIT, and that half is now a bundled asset. The thumbnails and animation GIFs are not: they are
+© Gym visual, redistributed to that one repository under a private written permission its own
+`NOTICE.md` says does not extend any further. Cloning it is not a licence to the media, so
+none of it is here. Every exercise still gets a picture, drawn in this repository as before.
+
+**Sleep guard, in Settings.** A couple of reminders as quiet hours approach, and one alert if
+the phone is still on after they start, checked against whether the screen is actually on
+rather than the clock alone. The alert is the one thing in the app allowed to break quiet
+hours, because protecting them is what it exists to do. Off by default, like every
+notification here.
+
+**Every exercise has a picture on the logger now, not only in the picker.** Entering one plays
+the same wave crest that marks a hop between sections, since that screen then animates
+nothing but the press for as long as a set is being logged, exactly as designed. The picture
+itself does not move there; motion belongs to the door, not the room.
+
+The panel is asked for at 120Hz where the display has it, since Compose's animations already
+run off the choreographer rather than a fixed step and had nothing stopping them using it.
+
 ## Next
 
 ### Before the next release
@@ -172,28 +206,23 @@ it says", and four things made that untrue. These come first, before anything ne
 4. **Launched once on a real phone.** Nothing has ever started `MainActivity`. Roborazzi
    renders screens, it does not prove the app opens. This step needs a person and a USB cable.
 
-### The full exercise library, with images
+### The exercise library's images, still
 
-All of it, not 38. Roughly 1,300 exercises with their muscles and equipment, seeded as an
-asset, and **an image for each**.
-
-The images are the part with a condition attached, and it is written here so it is not
-quietly dropped later:
+The metadata is done: 1,311 exercises with real muscles, equipment and instructions, from
+[hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset)'s MIT half.
+The images remain undone, and it is now the fourth source to fail the same check rather than
+the third:
 
 - **The source must have a licence that permits redistribution in an Apache-2.0 app, checked
-  in the source's own licence file.** Popularity is not a licence. Images being widely used is
-  evidence that they are popular, not that they are licensed, and an app shipping media it has
-  no right to is an app that gets taken down.
+  in the source's own licence file.** Popularity is not a licence.
 - **openGym's media is out.** Its own notice records that the animation rights are unresolved.
-  openGym is also AGPL, so neither its data nor its media may be copied into Tide regardless.
-- **Several datasets are all called "ExerciseDB"** and they do not share a licence. One is a
-  commercial API. The name is not enough; the specific repository and its licence are.
-- **Bundled, never hotlinked.** The app is offline and keeps no telemetry. Fetching images from
-  someone's CDN would break offline use and tell a third party which exercises you look at.
-- **Measure the size before choosing a format.** A thousand animations and a thousand stills
-  cost very different amounts of APK. Pick the format after measuring, not before.
+- **"ExerciseDB" is several datasets, not one**, and they do not share a licence.
+- **hasaneyldrm/exercises-dataset's media is Gym visual's**, redistributed under a permission
+  private to that one repository. Its own `NOTICE.md` says cloning it grants nothing.
+- **Bundled, never hotlinked**, and **measure the size before choosing a format**, both still
+  true whenever a source finally does clear the check.
 
-If no source clears the licence check, the library ships with metadata only and images wait.
+Until one does, every exercise keeps the drawn mark this app makes itself.
 
 ### A weekly planner
 

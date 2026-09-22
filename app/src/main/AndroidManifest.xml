@@ -4,6 +4,38 @@
     <!-- Asked for at the moment the person turns the digest on, never at launch. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+         The one thing that needs this: the model download in Ask, started by a
+         button press. Nothing else in the app opens a socket.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+         Health Connect. Read-only: there is no WRITE_* permission here because
+         Tide never writes to it. Each is declared for real, because the
+         Settings screen and Body both check exactly this set.
+    -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+
+    <!--
+         Package visibility (Android 11+). Without these, resolving the Health
+         Connect permission screen or the Play Store "get it" intent can fail
+         silently: the button appears to do nothing rather than erroring.
+    -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="market" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

@@ -27,6 +27,11 @@ class SettingsViewModel(
     private val scope: CoroutineScope,
     /** Called whenever the digest time or its on/off state changes. */
     private val onScheduleChanged: (enabled: Boolean, at: LocalTime) -> Unit,
+    /**
+     * Called whenever sleep guard's on/off state changes, or when quiet
+     * hours' start time moves, since that time is also bedtime.
+     */
+    private val onSleepGuardScheduleChanged: (enabled: Boolean, quietStart: LocalTime) -> Unit = { _, _ -> },
     /** Null in tests, which have no audio device and must never make a sound. */
     private val sound: OceanSoundPlayer? = null,
     private val now: () -> Instant = Instant::now,
@@ -58,12 +63,12 @@ class SettingsViewModel(
 
     fun onQuietStartEarlier() {
         prefs.quietStart = prefs.quietStart.minusHours(1)
-        render()
+        applySleepGuardSchedule()
     }
 
     fun onQuietStartLater() {
         prefs.quietStart = prefs.quietStart.plusHours(1)
-        render()
+        applySleepGuardSchedule()
     }
 
     fun onQuietEndEarlier() {
@@ -74,6 +79,15 @@ class SettingsViewModel(
     fun onQuietEndLater() {
         prefs.quietEnd = prefs.quietEnd.plusHours(1)
         render()
+    }
+
+    /**
+     * A couple of reminders as bedtime approaches, and an alert if the phone
+     * is still awake past it. Off by default, like everything here.
+     */
+    fun onToggleSleepGuard() {
+        prefs.sleepGuardEnabled = !prefs.sleepGuardEnabled
+        applySleepGuardSchedule()
     }
 
     /**
@@ -142,6 +156,11 @@ class SettingsViewModel(
         render()
     }
 
+    private fun applySleepGuardSchedule() {
+        onSleepGuardScheduleChanged(prefs.sleepGuardEnabled, prefs.quietStart)
+        render()
+    }
+
     private fun render() {
         _state.value = read().copy(lastTestResult = _state.value.lastTestResult)
     }
@@ -155,6 +174,7 @@ class SettingsViewModel(
         permissionGranted = notifier.canPost(),
         soundPlaying = sound?.isPlaying == true,
         soundVolume = "${(soundVolume * 100).toInt()}%",
+        sleepGuardEnabled = prefs.sleepGuardEnabled,
     )
 
     private companion object {
@@ -174,4 +194,5 @@ data class SettingsUiState(
     val lastTestResult: String? = null,
     val soundPlaying: Boolean = false,
     val soundVolume: String = "50%",
+    val sleepGuardEnabled: Boolean = false,
 )

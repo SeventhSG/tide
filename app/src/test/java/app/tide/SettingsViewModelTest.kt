@@ -42,6 +42,7 @@ class SettingsViewModelTest {
     private lateinit var vm: SettingsViewModel
 
     private var scheduled: Pair<Boolean, LocalTime>? = null
+    private var sleepGuardScheduled: Pair<Boolean, LocalTime>? = null
 
     @Before
     fun setUp() {
@@ -60,6 +61,7 @@ class SettingsViewModelTest {
             notifier = notifier,
             scope = scope,
             onScheduleChanged = { enabled, at -> scheduled = enabled to at },
+            onSleepGuardScheduleChanged = { enabled, at -> sleepGuardScheduled = enabled to at },
         )
     }
 
@@ -75,6 +77,32 @@ class SettingsViewModelTest {
         assertEquals("08:00", vm.state.value.digestAt)
         assertTrue("quiet hours are on by default", vm.state.value.quietHoursEnabled)
         assertEquals(null, scheduled)
+        assertFalse("sleep guard is also off by default", vm.state.value.sleepGuardEnabled)
+        assertEquals(null, sleepGuardScheduled)
+    }
+
+    @Test
+    fun `turning on sleep guard schedules it against bedtime`() {
+        vm.onToggleSleepGuard()
+        assertTrue(vm.state.value.sleepGuardEnabled)
+        assertEquals(true to LocalTime.of(22, 0), sleepGuardScheduled)
+
+        vm.onToggleSleepGuard()
+        assertEquals(false to LocalTime.of(22, 0), sleepGuardScheduled)
+        assertFalse(prefs.sleepGuardEnabled)
+    }
+
+    @Test
+    fun `moving bedtime reschedules sleep guard along with it`() {
+        vm.onToggleSleepGuard()
+        vm.onQuietStartLater()
+
+        assertEquals("23:00", vm.state.value.quietStart)
+        assertEquals(
+            "sleep guard is anchored to quiet hours' own start time",
+            true to LocalTime.of(23, 0),
+            sleepGuardScheduled,
+        )
     }
 
     @Test

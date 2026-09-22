@@ -32,6 +32,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.tide.core.design.ContinuousCornerShape
 import app.tide.core.design.DataStyle
+import app.tide.core.design.ExerciseArt
 import app.tide.core.design.LabelStyle
 import app.tide.core.design.OceanBackground
 import app.tide.core.design.OceanIntensity
@@ -77,6 +78,9 @@ import app.tide.core.design.TideTheme
 /** Pure view state, so the screen renders in a screenshot test with no database. */
 data class SessionUiState(
     val exerciseName: String,
+    /** Both drive the drawn mark next to the name. Null before the exercise loads. */
+    val equipment: app.tide.core.data.db.Equipment? = null,
+    val muscle: app.tide.core.data.db.Muscle? = null,
     val setNumber: Int,
     /**
      * Null when nothing has prescribed a set count yet. The header then reads
@@ -190,21 +194,31 @@ fun SessionScreen(
                 }
             }
 
-            Text(
-                state.exerciseName,
-                style = MaterialTheme.typography.titleLarge,
-                color = TideColors.Text,
-            )
-            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    state.targetSets?.let { "SET ${state.setNumber} OF $it" }
-                        ?: "SET ${state.setNumber}",
-                    style = LabelStyle,
-                    color = TideColors.TextFaint,
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(state.ruleLabel, style = LabelStyle, color = TideColors.Accent)
+                // Static, deliberately: the logger animates nothing but the
+                // press, and this is pressed a hundred times a session. The
+                // one moment this picture gets to move is the crest that
+                // plays on the way in, not while a set is being logged.
+                ExerciseArt(state.equipment.art(), state.muscle.region(), size = 52.dp)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(
+                        state.exerciseName,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TideColors.Text,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            state.targetSets?.let { "SET ${state.setNumber} OF $it" }
+                                ?: "SET ${state.setNumber}",
+                            style = LabelStyle,
+                            color = TideColors.TextFaint,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(state.ruleLabel, style = LabelStyle, color = TideColors.Accent)
+                    }
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -626,6 +640,8 @@ private fun SessionPreview() {
         SessionScreen(
             SessionUiState(
                 exerciseName = "Barbell row",
+                equipment = app.tide.core.data.db.Equipment.Barbell,
+                muscle = app.tide.core.data.db.Muscle.Back,
                 setNumber = 3,
                 targetSets = 4,
                 ruleLabel = "DOUBLE PROGRESSION 6-9",

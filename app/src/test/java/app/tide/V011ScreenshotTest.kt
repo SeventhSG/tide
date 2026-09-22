@@ -44,6 +44,36 @@ class V011ScreenshotTest {
     }
 
     @Test
+    fun todayWithScaffold() {
+        // Today used to carry its own LiquidGlassNav, a leftover from before
+        // TideScaffold existed, so this screen actually showed two bars
+        // stacked. This wraps it exactly as MainActivity does, which is the
+        // only way that regression would ever show up in a screenshot.
+        capture("today-with-nav") {
+            TideScaffold(section = Section.Today, onSelectSection = {}) {
+                TodayScreen(
+                    TodayUiState(
+                        dateLabel = "TUE 22 SEPTEMBER",
+                        headline = "No session\nyet today.",
+                        subline = "Last session was 2 days ago.",
+                        volumeLast7Days = "12 480 kg",
+                        week = listOf(
+                            TodayUiState.Day("M", trained = true, isToday = false),
+                            TodayUiState.Day("T", trained = false, isToday = true),
+                            TodayUiState.Day("W", trained = false, isToday = false),
+                            TodayUiState.Day("T", trained = false, isToday = false),
+                            TodayUiState.Day("F", trained = false, isToday = false),
+                            TodayUiState.Day("S", trained = false, isToday = false),
+                            TodayUiState.Day("S", trained = false, isToday = false),
+                        ),
+                        weekSummary = "1 SESSION",
+                    ),
+                )
+            }
+        }
+    }
+
+    @Test
     fun trainHub() {
         capture("train") {
             TideScaffold(section = Section.Train, onSelectSection = {}) {

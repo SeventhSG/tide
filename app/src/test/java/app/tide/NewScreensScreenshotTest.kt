@@ -145,6 +145,8 @@ class NewScreensScreenshotTest {
             SessionScreen(
                 SessionUiState(
                     exerciseName = "Back squat",
+                    equipment = app.tide.core.data.db.Equipment.Barbell,
+                    muscle = app.tide.core.data.db.Muscle.Quads,
                     setNumber = 3,
                     targetSets = 3,
                     ruleLabel = "LINEAR +5",

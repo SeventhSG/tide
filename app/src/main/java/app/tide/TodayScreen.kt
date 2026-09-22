@@ -32,8 +32,6 @@ import androidx.compose.ui.unit.dp
 import app.tide.core.design.ContinuousCornerShape
 import app.tide.core.design.DataStyle
 import app.tide.core.design.LabelStyle
-import app.tide.core.design.LiquidGlassNav
-import app.tide.core.design.NavItem
 import app.tide.core.design.OceanBackground
 import app.tide.core.design.TideButton
 import app.tide.core.design.TideColors
@@ -55,15 +53,11 @@ import app.tide.core.design.oceanScrimColor
  * wait for Body, renewals wait for Money, and the backup age waits for
  * something that backs up. Inventing them was the first thing this screen did
  * and the first thing that had to go.
+ *
+ * **No nav bar in here.** [TideScaffold] owns the one bottom bar shared by
+ * every main section; a second one embedded in this screen shipped briefly as
+ * a leftover from before that existed, stacking two bars on top of each other.
  */
-private val navItems = listOf(
-    NavItem("TODAY", TideIcons.Waves),
-    NavItem("TRAIN", TideIcons.Barbell),
-    NavItem("BODY", TideIcons.Pulse),
-    NavItem("MONEY", TideIcons.Card),
-    NavItem("ASK", TideIcons.Chat),
-)
-
 @Composable
 fun TodayScreen(
     state: TodayUiState,
@@ -75,100 +69,89 @@ fun TodayScreen(
     onSettings: () -> Unit = {},
 ) {
     OceanBackground(modifier) {
-        Column(Modifier.fillMaxSize()) {
-            Column(
-                Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .statusBarsPadding()
-                    .padding(horizontal = 20.dp),
-            ) {
-                TopBar(onSettings)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .statusBarsPadding()
+                .padding(horizontal = 20.dp),
+        ) {
+            TopBar(onSettings)
 
-                Spacer(Modifier.height(26.dp))
-                Text(state.dateLabel, style = LabelStyle, color = TideColors.TextFaint)
+            Spacer(Modifier.height(26.dp))
+            Text(state.dateLabel, style = LabelStyle, color = TideColors.TextFaint)
 
-                Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(
+                state.headline,
+                style = MaterialTheme.typography.displayLarge,
+                color = TideColors.Text,
+            )
+
+            state.subline?.let {
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    state.headline,
-                    style = MaterialTheme.typography.displayLarge,
-                    color = TideColors.Text,
+                    it,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TideColors.TextMuted,
                 )
-
-                state.subline?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TideColors.TextMuted,
-                    )
-                }
-
-                // No "Skip today". Skipping is only meaningful against a plan,
-                // and there is no planner yet, so the button would be a gesture
-                // at a schedule that does not exist.
-                Spacer(Modifier.height(20.dp))
-                TideButton(onClick = onStartSession) {
-                    Text(
-                        if (state.resuming) "Resume session" else "Start session",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = TideColors.OnAccent,
-                    )
-                }
-
-                // One row, because one is what the database can answer today.
-                // The section returns when Body and Money give it more.
-                state.volumeLast7Days?.let {
-                    Spacer(Modifier.height(22.dp))
-                    Scrim {
-                        Text("DRIFT", style = LabelStyle, color = TideColors.TextFaint)
-                        Spacer(Modifier.height(6.dp))
-                        DriftRow("Volume, 7 days", it, divider = false)
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
-                WeekStrip(state)
-
-                // Quiet, because both matter enormously on day one and rarely
-                // after it.
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TideGhostButton(onClick = onCalendar, modifier = Modifier.weight(1f)) {
-                        Text(
-                            "History",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = TideColors.TextMuted,
-                        )
-                    }
-                    TideGhostButton(onClick = onMuscles, modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Muscle map",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = TideColors.TextMuted,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                TideGhostButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "Import a history",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = TideColors.TextMuted,
-                    )
-                }
-
-                Spacer(Modifier.height(16.dp))
             }
 
-            // TRAIN opens the picker. The other three select nothing, because
-            // Body, Money and Ask are not built and a tab that moved the
-            // highlight onto an empty screen would be worse than an inert one.
-            LiquidGlassNav(
-                items = navItems,
-                selected = 0,
-                onSelect = { if (it == 1) onStartSession() },
-            )
+            // No "Skip today". Skipping is only meaningful against a plan,
+            // and there is no planner yet, so the button would be a gesture
+            // at a schedule that does not exist.
+            Spacer(Modifier.height(20.dp))
+            TideButton(onClick = onStartSession) {
+                Text(
+                    if (state.resuming) "Resume session" else "Start session",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TideColors.OnAccent,
+                )
+            }
+
+            // One row, because one is what the database can answer today.
+            // The section returns when Body and Money give it more.
+            state.volumeLast7Days?.let {
+                Spacer(Modifier.height(22.dp))
+                Scrim {
+                    Text("DRIFT", style = LabelStyle, color = TideColors.TextFaint)
+                    Spacer(Modifier.height(6.dp))
+                    DriftRow("Volume, 7 days", it, divider = false)
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            WeekStrip(state)
+
+            // Quiet, because both matter enormously on day one and rarely
+            // after it.
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                TideGhostButton(onClick = onCalendar, modifier = Modifier.weight(1f)) {
+                    Text(
+                        "History",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TideColors.TextMuted,
+                    )
+                }
+                TideGhostButton(onClick = onMuscles, modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Muscle map",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TideColors.TextMuted,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            TideGhostButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Import a history",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TideColors.TextMuted,
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
         }
     }
 }

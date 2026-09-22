@@ -33,6 +33,7 @@ import app.tide.core.design.WaveTransition
 import app.tide.notify.DigestWorker
 import app.tide.notify.NotifyPreferences
 import app.tide.notify.PlanSchedule
+import app.tide.notify.SleepGuardWorker
 import app.tide.sound.OceanSoundPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,17 +83,26 @@ class MainActivity : ComponentActivity() {
         // they exist from the first launch whether or not anything is posted.
         Tide.notifier(applicationContext).ensureChannels()
 
+        // Ask for the highest refresh rate the panel has. Compose animations are
+        // already frame-rate independent (they run off the choreographer, not a
+        // fixed step), so this is the one line needed to let a 90 or 120Hz
+        // display actually use it rather than being capped at 60. Harmless on a
+        // 60Hz phone: the system clamps to what the panel supports.
+        window.attributes = window.attributes.apply { preferredRefreshRate = 120f }
+
         setContent {
             TideTheme {
                 var booted by remember { mutableStateOf(false) }
                 var screen by remember { mutableStateOf<Screen>(Screen.Main(Section.Today)) }
                 var forward by remember { mutableStateOf(true) }
 
-                // The boot wave covers the first frames, during which the
-                // database opens anyway. It never holds anything back: the app
-                // is behind it, already composed.
+                // Exclusively one or the other. Both used to be mounted at
+                // once, with the real app composed second and so drawn on top,
+                // which hid the boot wave behind it for its entire run: the
+                // animation was playing, just never visible.
                 if (!booted) {
                     BootWave(Modifier.fillMaxSize()) { booted = true }
+                    return@TideTheme
                 }
 
                 val go: (Screen, Boolean) -> Unit = { destination, deeper ->
@@ -103,7 +113,11 @@ class MainActivity : ComponentActivity() {
                 WaveTransition(
                     target = screen,
                     modifier = Modifier.fillMaxSize(),
-                    crest = screen is Screen.Main,
+                    // The crest also marks entering an exercise, since that is
+                    // the one other moment worth a flourish: it is the door
+                    // into the one screen in the app that then animates
+                    // nothing but the press for as long as you are inside it.
+                    crest = screen is Screen.Main || screen is Screen.Session,
                     forward = forward,
                 ) { current ->
                     when (current) {
@@ -477,6 +491,13 @@ private fun WiredSettingsScreen(onBack: () -> Unit) {
                     DigestWorker.cancel(context.applicationContext)
                 }
             },
+            onSleepGuardScheduleChanged = { enabled, quietStart ->
+                if (enabled) {
+                    SleepGuardWorker.schedule(context.applicationContext, quietStart)
+                } else {
+                    SleepGuardWorker.cancel(context.applicationContext)
+                }
+            },
             sound = player,
         )
     }
@@ -514,6 +535,7 @@ private fun WiredSettingsScreen(onBack: () -> Unit) {
         onToggleSound = viewModel::onToggleSound,
         onSoundQuieter = viewModel::onSoundQuieter,
         onSoundLouder = viewModel::onSoundLouder,
+        onToggleSleepGuard = viewModel::onToggleSleepGuard,
     )
 }
 

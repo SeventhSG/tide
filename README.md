@@ -18,7 +18,7 @@ Training that decides what you lift today. Body, read from your own watch. No ac
 [![Top language](https://img.shields.io/github/languages/top/SeventhSG/tide?style=flat-square&color=2ED3B0&labelColor=0B1D25)](https://github.com/SeventhSG/tide)
 [![Stars](https://img.shields.io/github/stars/SeventhSG/tide?style=flat-square&color=2ED3B0&labelColor=0B1D25)](https://github.com/SeventhSG/tide/stargazers)
 
-**245 tests green · minSdk 26 · Kotlin, Compose, Room · nothing in here phones home**
+**293 tests green · minSdk 26 · Kotlin, Compose, Room · nothing in here phones home**
 
 </div>
 
@@ -26,9 +26,10 @@ Training that decides what you lift today. Body, read from your own watch. No ac
 
 ## Where it stands
 
-**v0.1.1.** Training is real and usable: log a session, finish it, and the progression engine
-decides next week's numbers. Around it there is a week planner, a history calendar, a muscle
-map, importers, a quiet daily summary, and a Body section reading Health Connect.
+**v0.1.2.** Training is real and usable: log a session, finish it, and the progression engine
+decides next week's numbers, over a **1,311-exercise library** rather than a starter set.
+Around it there is a week planner, a history calendar, a muscle map, importers, a quiet daily
+summary with a sleep guard, and a Body section reading Health Connect.
 
 **It has never run on a physical phone.** The machine it is built on has no usable emulator,
 so every screen is verified by rendering it on the JVM and every rule by test. That is a real
@@ -36,8 +37,8 @@ gap, stated here rather than discovered on install.
 
 | | |
 |---|---|
-| Builds | `app-debug.apk`, 11 MB, minSdk 26, targetSdk 35 |
-| Tests | 245 green: progression, schedule, notify, importers, migrations, every viewmodel |
+| Builds | `app-debug.apk`, 13 MB, minSdk 26, targetSdk 35 |
+| Tests | 293 green: progression, schedule, notify, importers, migrations, every viewmodel |
 | Sections | Today, Train, Body, Money (empty on purpose), Ask |
 | Not yet | Answers in Ask, Money, retroactive logging, a licensed image library |
 
@@ -51,6 +52,8 @@ gap, stated here rather than discovered on install.
   progression, timed, bodyweight) decide what to lift today from what you lifted last time.
   Finishing a session runs it and says what it decided, in plain words, with next time's
   target.
+- **A 1,311-exercise library**, MIT-licensed metadata bundled as an asset: name, muscles,
+  equipment and step-by-step instructions. Its own images are not in here; see Licences.
 - **Warm-ups never count** toward progression, an estimated 1RM, the muscle map or volume.
   The filter lives in SQL, so no caller can forget it.
 - **A week you arrange.** Each day holds exercises in the order you will do them, and a line
@@ -161,10 +164,15 @@ Tide is **Apache-2.0**. See [LICENSE](LICENSE).
   progression rules, set taxonomy and three-mode muscle map. openGym is AGPL-3.0 and **no
   openGym code is used here**: the behaviour was studied and reimplemented. It is a good
   piece of software and worth self-hosting if a web app suits you better.
-- **Exercise images are drawn in this repository**, not licensed from anyone. No photo or
-  animation set has cleared the check that its own licence permits redistribution in an
-  Apache-2.0 app, so the app draws a mark per equipment type on a tile tinted by muscle.
-  When a set does clear the check, it replaces them.
+- The exercise **metadata** (names, muscles, equipment, instructions) is the MIT half of
+  [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset), bundled
+  as an asset. Its **media is not**: that repository's own `NOTICE.md` records the thumbnails
+  and GIFs as © Gym visual, redistributed to it alone under a permission that does not extend
+  further, so none of it is here.
+- **Exercise images are drawn in this repository instead**, not licensed from anyone. No
+  photo or animation set considered so far has cleared the check that its own licence permits
+  redistribution in an Apache-2.0 app, so the app draws a mark per equipment type on a tile
+  tinted by muscle. When a set does clear the check, it replaces them.
 - **The ocean sound is generated**, not sampled: filtered noise under a slow swell, so no
   audio file ships and it never repeats.
 - The model offered in Ask is **Qwen2.5 0.5B Instruct** (Apache-2.0), downloaded on request.

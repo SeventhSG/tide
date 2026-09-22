@@ -72,6 +72,8 @@ class TodayScreenshotTest {
                     SessionScreen(
                         SessionUiState(
                             exerciseName = "Barbell row",
+                            equipment = app.tide.core.data.db.Equipment.Barbell,
+                            muscle = app.tide.core.data.db.Muscle.Back,
                             setNumber = 3,
                             targetSets = 4,
                             ruleLabel = "DOUBLE PROGRESSION 6-9",

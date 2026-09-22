@@ -1,5 +1,7 @@
 package app.tide
 
+import app.tide.core.data.db.Equipment
+import app.tide.core.data.db.Muscle
 import app.tide.core.data.db.SetKind
 import app.tide.core.data.db.WorkoutSetEntity
 import app.tide.core.data.training.Prescription
@@ -38,6 +40,8 @@ class SessionViewModel(
     private var sessionId: String? = null
     private var startedAt = now()
     private var exerciseName = exerciseId
+    private var equipment: Equipment? = null
+    private var muscle: Muscle? = null
     private var ruleLabel = ""
     private var targetSets: Int? = null
     private var lastTime: String? = null
@@ -55,6 +59,8 @@ class SessionViewModel(
         scope.launch {
             val exercise = repository.exerciseById(exerciseId)
             exerciseName = exercise?.name ?: exerciseId
+            equipment = exercise?.equipment
+            muscle = exercise?.primaryMuscle
             val rule = RuleCodec.decode(exercise?.progressionRule) ?: defaultRule
             ruleLabel = formatRuleLabel(rule)
 
@@ -181,6 +187,8 @@ class SessionViewModel(
         val (logged, nextSetNumber) = buildLogged(latestSets)
         _state.value = SessionUiState(
             exerciseName = exerciseName,
+            equipment = equipment,
+            muscle = muscle,
             setNumber = nextSetNumber,
             targetSets = targetSets,
             ruleLabel = ruleLabel,

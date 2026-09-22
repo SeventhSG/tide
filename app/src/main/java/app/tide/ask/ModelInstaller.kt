@@ -78,18 +78,23 @@ class ModelInstaller(
             return@flow
         }
 
-        val resuming = connection.responseCode == HttpURLConnection.HTTP_PARTIAL
-        if (connection.responseCode != HttpURLConnection.HTTP_OK && !resuming) {
-            emit(InstallState.Failed("The host answered ${connection.responseCode}."))
-            connection.disconnect()
-            return@flow
-        }
+        // Everything from here touches the network or the filesystem, either
+        // of which can throw for reasons that have nothing to do with the
+        // download itself: no INTERNET permission, the connection dropping
+        // mid read, a socket timeout. None of those are allowed to reach the
+        // collector as an uncaught exception, because a flow with no `catch`
+        // downstream turns that into a crash rather than a Failed state.
+        val outcome = runCatching {
+            val resuming = connection.responseCode == HttpURLConnection.HTTP_PARTIAL
+            if (connection.responseCode != HttpURLConnection.HTTP_OK && !resuming) {
+                return@runCatching InstallState.Failed("The host answered ${connection.responseCode}.")
+            }
 
-        val total = connection.contentLengthLong.let { if (it > 0) it + (if (resuming) already else 0) else model.approximateBytes }
-        var written = if (resuming) already else 0L
-        if (!resuming) partial.delete()
+            val total = connection.contentLengthLong
+                .let { if (it > 0) it + (if (resuming) already else 0) else model.approximateBytes }
+            var written = if (resuming) already else 0L
+            if (!resuming) partial.delete()
 
-        runCatching {
             connection.inputStream.use { input ->
                 java.io.FileOutputStream(partial, resuming).use { output ->
                     val buffer = ByteArray(1 shl 16)
@@ -102,23 +107,21 @@ class ModelInstaller(
                     }
                 }
             }
-        }.onFailure {
+
+            if (written < model.minimumBytes) {
+                partial.delete()
+                InstallState.Failed("The file arrived incomplete and was not kept.")
+            } else {
+                partial.renameTo(file)
+                InstallState.Done(file.length())
+            }
+        }.getOrElse {
             // The partial file stays. The next attempt continues from here.
-            emit(InstallState.Failed("The download stopped. It will continue where it left off."))
-            connection.disconnect()
-            return@flow
+            InstallState.Failed("The download stopped. It will continue where it left off.")
         }
 
-        connection.disconnect()
-
-        if (written < model.minimumBytes) {
-            emit(InstallState.Failed("The file arrived incomplete and was not kept."))
-            partial.delete()
-            return@flow
-        }
-
-        partial.renameTo(file)
-        emit(InstallState.Done(file.length()))
+        runCatching { connection.disconnect() }
+        emit(outcome)
     }.flowOn(Dispatchers.IO)
 
     private companion object {

@@ -47,6 +47,14 @@ class NotifyPreferences(context: Context) {
         get() = LocalTime.of(prefs.getInt(KEY_QUIET_END, 7), 0)
         set(value) = prefs.edit().putInt(KEY_QUIET_END, value.hour).apply()
 
+    /**
+     * Off by default, like every notification in this app. Reminders as
+     * [quietStart] approaches, and an alert if the phone is still on past it.
+     */
+    var sleepGuardEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SLEEP_GUARD_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_SLEEP_GUARD_ENABLED, value).apply()
+
     /** The shape `:core:notify` decides with. */
     fun settings(): NotifySettings = NotifySettings(
         quietHours = QuietHours(
@@ -64,5 +72,6 @@ class NotifyPreferences(context: Context) {
         const val KEY_QUIET_ENABLED = "quiet.enabled"
         const val KEY_QUIET_START = "quiet.start"
         const val KEY_QUIET_END = "quiet.end"
+        const val KEY_SLEEP_GUARD_ENABLED = "sleepguard.enabled"
     }
 }
