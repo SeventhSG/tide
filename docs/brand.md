@@ -1,85 +1,71 @@
 # Brand
 
-## The mark
-
-One full tidal cycle, drawn against a chart datum.
+## The icon
 
 ![Tide icon tests](../brand/tide-icon-tests.png)
 
-A tide curve is never drawn bare. It is always plotted against a datum, because the curve on
-its own tells you nothing: what matters is where the water sits relative to a known level.
-That is also how this app reads a life. A single night's sleep is noise. Where it sits
-against your own baseline is the reading.
+A full moon over a single swell at night. Generated art, chosen for the mood rather than for
+symbolic cleverness, and it does the one job an icon has: at 48px the moon and the lit crest
+still read, which is more than most detailed icons manage.
 
-The datum line is doing all the work here. Without it the mark is a tilde, which is the
-generic water glyph every app in the category already uses. With it, the mark becomes a
-chart, and it picks up two enclosed counters that give it a shape you can remember.
+`brand/tide-icon-source.png` is the master. It is a **full-bleed 1024 square with square
+corners**, deliberately: Android adaptive icons are masked by the launcher into a circle, a
+squircle, a rounded square or a teardrop, and handing the system a pre-rounded image
+double-rounds it. The original render arrived inside a rounded presentation card, so the card
+was cropped out and the corners were rebuilt by projecting the artwork outward along the
+corner arc, then softened so the projection leaves no streaks.
 
-## What this replaced, and why
-
-The app was called Keel first, and the mark was a keel. It went through six versions and
-every one of them failed the same way: a hull with a fin below it is a horizontal element on
-top of a vertical stem on top of a base, which is structurally a table. The variants read in
-turn as a tuning fork, a leaf, a goblet, a shot glass and a champagne coupe. Tuning the
-proportions never escaped it, because the silhouette family itself is furniture.
-
-The lesson kept: **a name whose referent cannot be drawn is a liability for something that
-needs a home screen icon.** Drawability is now a naming criterion, not a downstream problem.
-
-## Why it survives Android
-
-Adaptive icons get masked by the launcher into a circle, a squircle, a rounded square or a
-teardrop, and the app does not choose which. Android 13 and later also render a themed icon
-from a flat single-colour silhouette.
-
-This mark is compact, centred, and sits entirely inside the 72dp safe zone, so every mask
-produces the same result. It is two strokes of one colour, so the monochrome variant is the
-same drawing.
-
-`brand/tide-icon-tests.png` is generated, not drawn: the real mark at 192, 96 and 48px, under
-both masks, and monochrome on dark and on light. Regenerate it and look at it after any
-geometry change:
+Everything else is generated from that one file:
 
 ```
 python tools/render_brand.py
 ```
 
-48px is the size that decides. A mark checked only at 512 is not checked.
+It writes the raster sizes, the mask and size test sheet above, and the palette sheet below.
+Run it and look at the sheet after any change to the artwork. 48px is the size that decides.
+A mark checked only at 512 is not checked.
 
-## Geometry
+## The palette comes from the icon
 
-On the 108dp adaptive-icon grid, entirely within the 72dp safe zone (18 to 90).
+![Tide palette](../brand/tide-palette.png)
 
-| | |
-|---|---|
-| Datum | y 54, x 21 to 87, 6 wide, round caps |
-| Curve | x 20 to 88, one full period, amplitude 18, 11 wide, round caps |
-| High water | y 36 |
-| Low water | y 72 |
-| Occupied | x 18 to 90, y 30.5 to 77.5 |
+The theme is not chosen next to the icon, it is quantised out of it. `surface` is the
+artwork's deep water, `accent` is its wave glow. That is why the two cannot drift apart, and
+why re-running the generator after an art change is not optional. Values and measured
+contrast ratios live in [design-system.md](design-system.md).
 
-The datum overhangs the curve slightly at each end, the way a chart axis runs past its data.
-It is thinner than the curve so it reads as a reference rather than a second wave.
+## What this replaced, and why
 
-`brand/tide-mark.svg` is the source of truth. `tools/render_brand.py` holds the same geometry
-as numbers and produces the PNGs. If the two disagree, the SVG wins.
+The app was called Keel first, and the mark was a keel drawn as flat vector geometry. It went
+through six versions and every one failed the same way: a hull with a fin below it is a
+horizontal element over a vertical stem over a base, which is structurally a table. The
+variants read in turn as a tuning fork, a leaf, a goblet, a shot glass and a champagne coupe.
+Tuning proportions never escaped it, because the silhouette family itself is furniture. An
+image model asked for the same thing produced a literal table, for the same reason.
 
-## Colour
+The name changed to Tide and the mark became a tide curve against a chart datum, which worked
+but was cold. It was replaced by this artwork.
 
-`#3FA98B` on `#0E1114`, the same accent and surface as the app, never recoloured. The
-monochrome variant uses `currentColor` and inherits.
+Two things worth keeping from that:
+
+- **A name whose referent cannot be drawn is a liability** for something that needs a home
+  screen icon. Drawability belongs in the naming round, not downstream of it.
+- **Image models are bad at flat geometric marks and good at atmospheric imagery.** Asking
+  one for a minimal two-colour vector logo wastes generations. Asking one for a moonlit sea
+  works first time. Use each for what it is good at.
 
 ## Files
 
 | File | Use |
 |---|---|
-| `brand/tide-mark.svg` | The mark alone, transparent. Source of truth. |
-| `brand/tide-mark-mono.svg` | Single colour via `currentColor`, for themed icons. |
-| `brand/tide-icon.svg` | Mark on the app ground, for the launcher icon. |
-| `brand/tide-512.png` `tide-192.png` `tide-96.png` `tide-48.png` | Raster renders. |
-| `brand/tide-icon-tests.png` | The mask and size checks above. |
+| `brand/tide-icon-source.png` | Master artwork, 1024, full bleed, square corners. |
+| `brand/tide-512.png` `tide-192.png` `tide-96.png` `tide-48.png` | Raster sizes. |
+| `brand/tide-icon-tests.png` | Mask and size checks. Generated. |
+| `brand/tide-palette.png` | Palette sampled from the artwork. Generated. |
 
-## Wordmark
+## Still to do
 
-Not yet drawn. When it is: Roboto Flex, tight tracking, lowercase, mark to the left at cap
-height. Nothing decorative between them.
+- A monochrome silhouette for Android 13+ themed icons. Detailed artwork cannot supply one,
+  so this needs a simple derived glyph, probably the moon and crest reduced to two shapes.
+- A wordmark.
+- The splash screen and the in-app depth gradient, both derived from this artwork.

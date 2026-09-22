@@ -1,99 +1,107 @@
-"""Render the Tide mark from the same geometry as brand/tide-mark.svg, so the
-shape can be looked at rather than assumed.
+"""Derive every icon asset, and the theme palette, from one source artwork.
 
-The output sheet is the check that matters: 48px is roughly what a home screen
-shows, and a mark only verified at 512 is not verified. Regenerate and look at
-it after any geometry change.
+brand/tide-icon-source.png is the master: a full-bleed 1024 square with no
+rounded corners, because Android adaptive icons are masked by the launcher and
+feeding them a pre-rounded image double-rounds it.
 
     python tools/render_brand.py
+
+Writes the raster icon sizes, a mask and size test sheet, and a palette sheet
+sampled from the artwork itself so the app theme and the icon cannot drift apart.
 """
-from PIL import Image, ImageDraw
-import math, os
+from PIL import Image, ImageDraw, ImageFilter
+import colorsys, os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(ROOT, "brand")
-CANVAS, SS = 108.0, 8                  # adaptive-icon grid, 8x supersample
-
-ACCENT = (63, 169, 139, 255)           # #3FA98B
-GROUND = (14, 17, 20, 255)             # #0E1114
-LIGHT = (232, 237, 240, 255)
-
-WAVE_L, WAVE_R = 20.0, 88.0            # one full tidal cycle
-DATUM_L, DATUM_R = 21.0, 87.0          # chart datum, overhangs the curve
-MID_Y, AMP = 54.0, 18.0
-WAVE_W, DATUM_W = 11.0, 6.0
+BRAND = os.path.join(ROOT, "brand")
+SOURCE = os.path.join(BRAND, "tide-icon-source.png")
+SIZES = (512, 192, 96, 48)
 
 
-def sine(n=240):
-    pts = []
-    for i in range(n + 1):
-        t = i / n
-        pts.append((WAVE_L + (WAVE_R - WAVE_L) * t,
-                    MID_Y - AMP * math.sin(2 * math.pi * t)))
-    return pts
+def load():
+    return Image.open(SOURCE).convert("RGB")
 
 
-def stroke(d, pts, w, s, colour):
-    sp = [(x * s, y * s) for x, y in pts]
-    d.line(sp, fill=colour, width=max(1, int(round(w * s))), joint="curve")
-    r = w * s / 2.0
-    for x, y in (sp[0], sp[-1]):
-        d.ellipse([x - r, y - r, x + r, y + r], fill=colour)
-
-
-def draw(size, colour, bg=None):
-    n = size * SS
-    s = n / CANVAS
-    img = Image.new("RGBA", (n, n), bg if bg else (0, 0, 0, 0))
-    lay = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    d = ImageDraw.Draw(lay)
-    stroke(d, [(DATUM_L, MID_Y), (DATUM_R, MID_Y)], DATUM_W, s, colour)
-    stroke(d, sine(), WAVE_W, s, colour)
-    img.alpha_composite(lay)
-    return img.resize((size, size), Image.LANCZOS)
-
-
-def mask(img, squircle=False):
+def mask(img, squircle=False, ss=4):
     n = img.size[0]
-    m = Image.new("L", (n * SS, n * SS), 0)
-    dd = ImageDraw.Draw(m)
-    box = [0, 0, n * SS - 1, n * SS - 1]
+    m = Image.new("L", (n * ss, n * ss), 0)
+    d = ImageDraw.Draw(m)
+    box = [0, 0, n * ss - 1, n * ss - 1]
     if squircle:
-        dd.rounded_rectangle(box, radius=int(n * SS * 0.24), fill=255)
+        d.rounded_rectangle(box, radius=int(n * ss * 0.24), fill=255)
     else:
-        dd.ellipse(box, fill=255)
-    out = img.copy()
+        d.ellipse(box, fill=255)
+    out = img.convert("RGBA").copy()
     out.putalpha(m.resize((n, n), Image.LANCZOS))
     return out
 
 
-def sheet():
+def hexof(c):
+    return "#{:02X}{:02X}{:02X}".format(*c[:3])
+
+
+def palette(img, n=8):
+    """Dominant colours, sorted dark to light. These are what the theme uses."""
+    q = img.resize((256, 256), Image.LANCZOS).quantize(colors=n, method=Image.MAXCOVERAGE)
+    pal = q.getpalette()[: n * 3]
+    counts = dict(q.getcolors())
+    cols = []
+    for i in range(n):
+        c = tuple(pal[i * 3: i * 3 + 3])
+        cols.append((counts.get(i, 0), c))
+    cols.sort(key=lambda t: sum(t[1]))
+    return cols
+
+
+def sheet(img):
     cell, pad = 192, 16
-    cells = [(draw(192, ACCENT, GROUND), "192px"),
-             (draw(96, ACCENT, GROUND), "96px"),
-             (draw(48, ACCENT, GROUND), "48px, homescreen"),
-             (mask(draw(192, ACCENT, GROUND)), "circle mask"),
-             (mask(draw(192, ACCENT, GROUND), True), "squircle mask"),
-             (draw(192, LIGHT, GROUND), "mono on dark"),
-             (draw(192, GROUND, LIGHT), "mono on light")]
+    cells = [(img.resize((cell, cell), Image.LANCZOS), "full bleed source"),
+             (mask(img.resize((192, 192), Image.LANCZOS), True), "squircle mask"),
+             (mask(img.resize((192, 192), Image.LANCZOS)), "circle mask"),
+             (img.resize((96, 96), Image.LANCZOS), "96px"),
+             (img.resize((48, 48), Image.LANCZOS), "48px, homescreen"),
+             (img.resize((48, 48), Image.LANCZOS).resize((cell, cell), Image.NEAREST),
+              "48px magnified")]
     w = len(cells) * (cell + pad) + pad
     sh = Image.new("RGBA", (w, cell + pad * 2 + 24), (28, 28, 30, 255))
-    dd = ImageDraw.Draw(sh)
+    d = ImageDraw.Draw(sh)
     x = pad
-    for img, lab in cells:
-        c = img if img.size[0] == cell else img.resize((cell, cell), Image.NEAREST)
-        sh.alpha_composite(c, (x, pad))
-        dd.text((x, pad + cell + 6), lab, fill=(180, 186, 190, 255))
+    for c, lab in cells:
+        c = c.convert("RGBA")
+        sh.alpha_composite(c, (x + (cell - c.size[0]) // 2, pad + (cell - c.size[1]) // 2))
+        d.text((x, pad + cell + 6), lab, fill=(180, 186, 190, 255))
         x += cell + pad
     return sh
 
 
+def palette_sheet(cols):
+    sw, h, pad = 150, 150, 12
+    w = len(cols) * (sw + pad) + pad
+    sh = Image.new("RGBA", (w, h + pad * 2 + 36), (28, 28, 30, 255))
+    d = ImageDraw.Draw(sh)
+    x = pad
+    for _, c in cols:
+        d.rectangle([x, pad, x + sw, pad + h], fill=c)
+        r, g, b = [v / 255 for v in c]
+        hh, l, s = colorsys.rgb_to_hls(r, g, b)
+        d.text((x, pad + h + 6), hexof(c), fill=(225, 230, 234, 255))
+        d.text((x, pad + h + 20), f"h{hh*360:.0f} s{s*100:.0f} l{l*100:.0f}",
+               fill=(150, 158, 164, 255))
+        x += sw + pad
+    return sh
+
+
 if __name__ == "__main__":
-    for sz in (512, 192, 96, 48):
-        draw(sz, ACCENT, GROUND).save(os.path.join(OUT, f"tide-{sz}.png"))
-    draw(512, ACCENT).save(os.path.join(OUT, "tide-512-transparent.png"))
-    sheet().save(os.path.join(OUT, "tide-icon-tests.png"))
-    top = MID_Y - AMP - WAVE_W / 2
-    bot = MID_Y + AMP + WAVE_W / 2
-    print(f"bounds x {DATUM_L - DATUM_W/2:.1f}..{DATUM_R + DATUM_W/2:.1f}"
-          f"  y {top:.1f}..{bot:.1f}  (safe zone 18..90)")
+    img = load()
+    assert img.size[0] == img.size[1], "source must be square"
+    for s in SIZES:
+        img.resize((s, s), Image.LANCZOS).save(os.path.join(BRAND, f"tide-{s}.png"))
+    sheet(img).save(os.path.join(BRAND, "tide-icon-tests.png"))
+    cols = palette(img)
+    palette_sheet(cols).save(os.path.join(BRAND, "tide-palette.png"))
+    print(f"source {img.size[0]}px, wrote {len(SIZES)} sizes, test sheet, palette sheet")
+    print("\nsampled palette, dark to light:")
+    for cnt, c in cols:
+        r, g, b = [v / 255 for v in c]
+        hh, l, s = colorsys.rgb_to_hls(r, g, b)
+        print(f"  {hexof(c)}  h{hh*360:6.1f}  s{s*100:5.1f}%  l{l*100:5.1f}%")

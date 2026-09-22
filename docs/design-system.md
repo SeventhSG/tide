@@ -17,24 +17,36 @@ Dark is the design target. Light is a full peer, not an afterthought.
 
 | Token | Dark | Meaning |
 |---|---|---|
-| `surface` | `#0E1114` | Off-black with a cold slate cast. Never `#000000`. |
-| `surfaceRaised` | `#161A1E` | Sheets, the one card type. |
-| `hairline` | `#232A30` | 1dp separators. The main grouping device. |
-| `textPrimary` | `#E8EDF0` | |
-| `textMuted` | `#8A969E` | Labels, units, secondary values. |
-| `accent` | `#3FA98B` | Starboard green. |
-| `warning` | `#C08A2E` | Expiring, stale, due soon. Nothing else. |
-| `critical` | `#C4423C` | Overdue, failed, over budget. Nothing else. |
+| `surface` | `#071016` | Deep water. Off-black with a blue-green cast. Never `#000000`. |
+| `surfaceRaised` | `#0E1C24` | Sheets, the one card type. |
+| `hairline` | `#1B3038` | 1dp separators. The main grouping device. |
+| `textPrimary` | `#E4F2F0` | |
+| `textMuted` | `#7F9A9C` | Labels, units, secondary values. |
+| `accent` | `#3FD3B6` | Wave glow. |
+| `warning` | `#D2952F` | Expiring, stale, due soon. Nothing else. |
+| `critical` | `#E05A4E` | Overdue, failed, over budget. Nothing else. |
+
+**Sampled from the icon, not invented.** `tools/render_brand.py` quantises
+`brand/tide-icon-source.png` and writes `brand/tide-palette.png`. The surface is the artwork's
+deep water, the accent is its wave glow. Theme and icon cannot drift apart because one is
+derived from the other. Re-run it after any change to the artwork.
+
+Measured contrast against `surface`, WCAG AA needs 4.5 for body text:
+
+| | ratio | |
+|---|---|---|
+| `textPrimary` | 16.7 | AA |
+| `accent` | 10.2 | AA |
+| `warning` | 7.4 | AA |
+| `textMuted` | 6.4 | AA |
+| `critical` | 5.3 | AA |
 
 **One accent, whole app, no user picker.** The accent is not decoration. It marks the one
-thing on a screen that the user is most likely to act on, which means a screen with two
-accent elements usually has a hierarchy problem rather than a colour problem.
+thing on a screen that the user is most likely to act on, so a screen with two accent
+elements usually has a hierarchy problem rather than a colour problem.
 
-Starboard green is the navigation light on the side that means clear to proceed. It sits far
-from both warning and critical, so the semantic scale stays unambiguous, which matters more
-in an app about health and money than a more fashionable hue would.
-
-**Red never decorates.** If something is red, something is wrong.
+**Red never decorates.** If something is red, something is wrong. Amber means expiring or
+stale, nothing else.
 
 Hex literals live in `:core:design` and nowhere else. A grep in CI enforces it.
 
