@@ -41,6 +41,26 @@ Hypervisor Platform, both need admin and a reboot. Neither is available. Running
 `-accel off` does not work as a fallback: the process starts, sits at zero CPU seconds and
 149 MB, and never boots. `adb` sees the port and the device stays `offline`.
 
+An AVD exists (`tide_pixel`, Pixel 6, API 35, `google_apis/x86_64`) and the system image is
+downloaded, so it looks ready. It is not. Booting it exits immediately with:
+
+```
+ERROR | x86_64 emulation currently requires hardware acceleration!
+```
+
+**The ARM route is closed too, and this is the part worth writing down**, because a system
+image that boots under software emulation is the obvious thing to reach for next. It does
+not work here. `arm64-v8a` images exist for API 26 and up, and Tide's `minSdk` is 26, so an
+API 30 image should in principle run the app. Emulator 37.1.11 refuses:
+
+```
+FATAL | Avd's CPU Architecture 'arm64' is not supported by the QEMU2 emulator
+        on x86_64 host. System image must match the host architecture.
+```
+
+ARM-on-x86 translation was removed from the emulator. No admin, no driver, and no flag
+changes that. The two routes that do work are admin plus a reboot, or a physical phone.
+
 So screenshots come from **Roborazzi**, which renders Compose to PNG on the JVM through
 Robolectric:
 

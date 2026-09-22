@@ -38,7 +38,7 @@ class SessionViewModel(
     private var startedAt = now()
     private var exerciseName = exerciseId
     private var ruleLabel = ""
-    private var targetSets = 1
+    private var targetSets: Int? = null
     private var lastTime: String? = null
     private var loadKg: Double? = null
     private var reps = 0
@@ -53,7 +53,9 @@ class SessionViewModel(
 
             val prescription = repository.prescriptionFor(exerciseId)
             val last = repository.lastPerformance(exerciseId)
-            targetSets = prescription?.sets ?: last?.sets ?: 1
+            // No fallback. An exercise with no history has no set target, and a
+            // made up one would read as a real plan on the screen.
+            targetSets = prescription?.sets ?: last?.sets
             loadKg = prescription?.loadKg ?: last?.loadKg
             reps = prescription?.reps ?: last?.reps ?: 0
             lastTime = last?.let { formatSet(it.loadKg, it.reps, it.durationSec) }
@@ -130,7 +132,7 @@ class SessionViewModel(
         private val EMPTY_STATE = SessionUiState(
             exerciseName = "",
             setNumber = 1,
-            targetSets = 1,
+            targetSets = null,
             ruleLabel = "",
             loadKg = "",
             reps = "",

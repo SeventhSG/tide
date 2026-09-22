@@ -60,7 +60,11 @@ import app.tide.core.design.TideTheme
 data class SessionUiState(
     val exerciseName: String,
     val setNumber: Int,
-    val targetSets: Int,
+    /**
+     * Null when nothing has prescribed a set count yet. The header then reads
+     * "SET 3" rather than inventing a total to count towards.
+     */
+    val targetSets: Int?,
     val ruleLabel: String,
     val loadKg: String,
     val reps: String,
@@ -119,7 +123,8 @@ fun SessionScreen(
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "SET ${state.setNumber} OF ${state.targetSets}",
+                    state.targetSets?.let { "SET ${state.setNumber} OF $it" }
+                        ?: "SET ${state.setNumber}",
                     style = LabelStyle,
                     color = TideColors.TextFaint,
                 )
