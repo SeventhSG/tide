@@ -206,15 +206,28 @@ icon in the Today top bar. Review is not a destination, it arrives.
 
 ## Gate before shipping
 
-Run it as a script, not as a good intention.
+Run it, do not remember to do it:
 
-- Zero en dash (U+2013) and em dash (U+2014) in `app/src`. Build the pattern with bash
-  ANSI-C quoting from the codepoints rather than pasting the characters, so the gate script
-  does not match itself. The `grep -P '\x{2013}'` form is wrong here: it errors on Git for
-  Windows and, because the error exits non-zero, a naive `&&` chain reports a false pass.
-  The gate ships with a control case that plants a dash in a temp file and asserts the check
-  still catches it, so a blind gate fails loudly instead of passing quietly.
-- Zero hex colour literals outside `:core:design`.
-- Screenshot tests pass in both themes at `fontScale` 1.0 and 1.5.
-- The whole suite passes with the device in airplane mode.
-- Every visible string read once, aloud.
+```
+bash tools/gate.sh
+```
+
+It checks four things and exits non-zero on the first failure:
+
+- **Zero en dash (U+2013) and em dash (U+2014)** in tracked text. The pattern is
+  built from codepoints rather than pasted, so the script does not match itself, and
+  it plants a dash in a temp file first to prove the check is not blind. An earlier
+  version scanned the whole working tree, tripped on binaries in `.gradle` and on
+  `gradle-wrapper.jar`, and printed FAIL without blocking the commit, which is worse
+  than having no gate at all.
+- **No hex colour literals outside `:core:design`.**
+- **No `NotificationManager` use outside `:core:notify`**, so the tier system cannot
+  be bypassed.
+- **No assistant attribution** anywhere in the source.
+
+Not automated, and still required:
+
+- Screenshot tests pass in both themes and at `fontScale` 1.0 and 1.5.
+- The suite passes with the device in airplane mode.
+- Every visible string read once, aloud. That catches the copy that sounds
+  thoughtful and means nothing, which no grep will.
