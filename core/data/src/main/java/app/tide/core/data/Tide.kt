@@ -6,6 +6,7 @@ import app.tide.core.data.db.Equipment
 import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.Muscle
 import app.tide.core.data.db.MIGRATION_1_2
+import app.tide.core.data.db.MIGRATION_2_3
 import app.tide.core.data.db.TideDatabase
 import app.tide.core.data.importer.TrainingImporter
 import app.tide.core.data.schedule.ScheduleRepository
@@ -44,7 +45,7 @@ object Tide {
                 // of the data and there is no server to restore it from, so a
                 // missing migration must fail loudly rather than wipe a year of
                 // training.
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
                 .also {
                     database = it

@@ -257,6 +257,30 @@ interface ScheduleDao {
     suspend fun bodyWeightEvidenceAt(from: Long, to: Long): List<Long>
 }
 
+@Dao
+interface NotificationLedgerDao {
+
+    @Query(
+        """
+        SELECT MAX(postedAt) FROM notification_ledger
+        WHERE notificationKey = :key
+        """,
+    )
+    suspend fun lastPostedAt(key: String): Long?
+
+    @Query("SELECT * FROM notification_ledger WHERE postedAt >= :from ORDER BY postedAt DESC")
+    suspend fun since(from: Long): List<NotificationLedgerEntity>
+
+    @Query("SELECT * FROM notification_ledger ORDER BY postedAt DESC LIMIT :limit")
+    fun observeRecent(limit: Int = 100): Flow<List<NotificationLedgerEntity>>
+
+    @Upsert suspend fun record(entry: NotificationLedgerEntity)
+
+    /** Keeps the record from growing without bound. */
+    @Query("DELETE FROM notification_ledger WHERE postedAt < :before")
+    suspend fun prune(before: Long)
+}
+
 /**
  * Version 2 adds the schedule.
  *
@@ -300,6 +324,36 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/**
+ * Version 3 adds the notification ledger.
+ *
+ * A pure addition again, and tested the same way. Nothing existing is touched.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `notification_ledger` (
+                `notificationKey` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `tier` TEXT NOT NULL,
+                `postedAt` INTEGER NOT NULL,
+                `inDigest` INTEGER NOT NULL,
+                PRIMARY KEY(`notificationKey`, `postedAt`)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_notification_ledger_notificationKey` " +
+                "ON `notification_ledger` (`notificationKey`)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_notification_ledger_postedAt` " +
+                "ON `notification_ledger` (`postedAt`)",
+        )
+    }
+}
+
 @Database(
     entities = [
         ExerciseEntity::class,
@@ -311,8 +365,9 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         ExerciseStateEntity::class,
         ScheduleRuleEntity::class,
         SkippedOccurrenceEntity::class,
+        NotificationLedgerEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -323,6 +378,7 @@ abstract class TideDatabase : RoomDatabase() {
     abstract fun exerciseState(): ExerciseStateDao
     abstract fun bodyWeight(): BodyWeightDao
     abstract fun schedule(): ScheduleDao
+    abstract fun notificationLedger(): NotificationLedgerDao
 
     companion object {
         const val NAME = "tide.db"

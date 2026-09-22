@@ -90,7 +90,40 @@ class MigrationTest {
     }
 
     @Test
-    fun `a fresh version 2 database opens and carries the schedule tables`() {
+    fun `the whole chain runs, from version 1 to the current version`() {
+        // The path a phone that installed the app early actually takes. Each
+        // migration is tested on its own above; this is the one that catches a
+        // pair that each work but do not compose.
+        helper.createDatabase(name, 1).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO session (id, routineId, dayIndex, startedAt, endedAt,
+                                     bodyWeightKg, note, isRetroactive)
+                VALUES ('s1', NULL, NULL, 1000, 2000, NULL, NULL, 0)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(name, 3, true, MIGRATION_1_2, MIGRATION_2_3).use { db ->
+            db.query("SELECT COUNT(*) FROM session").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals("a session from version 1 must survive both steps", 1, cursor.getInt(0))
+            }
+            db.execSQL(
+                """
+                INSERT INTO notification_ledger (notificationKey, title, tier, postedAt, inDigest)
+                VALUES ('k', 'Legs', 'Quiet', 5000, 0)
+                """.trimIndent(),
+            )
+            db.query("SELECT COUNT(*) FROM notification_ledger").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(1, cursor.getInt(0))
+            }
+        }
+    }
+
+    @Test
+    fun `a fresh version 3 database opens and carries every table`() {
         val db = Room.inMemoryDatabaseBuilder(
             InstrumentationRegistry.getInstrumentation().targetContext,
             TideDatabase::class.java,
@@ -102,8 +135,12 @@ class MigrationTest {
             val tables = buildList {
                 while (cursor.moveToNext()) add(cursor.getString(0))
             }
-            assertTrue("schedule_rule missing from a fresh build", "schedule_rule" in tables)
-            assertTrue("skipped_occurrence missing from a fresh build", "skipped_occurrence" in tables)
+            listOf(
+                "exercise", "session", "workout_set", "exercise_state",
+                "schedule_rule", "skipped_occurrence", "notification_ledger",
+            ).forEach {
+                assertTrue("$it missing from a fresh build", it in tables)
+            }
         }
         db.close()
     }

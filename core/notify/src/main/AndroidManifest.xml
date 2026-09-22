@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Declared here, in the one module allowed to post a notification, so the
+      permission and the code that needs it live together. Android 13 and up
+      will not show anything without it, and the app must ask at runtime.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+</manifest>

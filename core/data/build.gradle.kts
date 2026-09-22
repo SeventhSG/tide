@@ -35,6 +35,7 @@ android {
 
 dependencies {
     api(project(":core:schedule"))
+    api(project(":core:notify"))
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

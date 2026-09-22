@@ -56,10 +56,20 @@ These are not stylistic preferences, they are enforced.
 ```
 :app                 navigation host, screens, theme application
 :core:design         tokens, type, shape, motion, ocean, nav, buttons
-:core:data           Room, the progression engine, TrainingRepository
+:core:data           Room, the progression engine, the importer, the repositories
+:core:schedule       recurrence, occurrences, the reconciler. Pure Kotlin, no Android
+:core:notify         tiers, channels, quiet hours, digest, ledger
 ```
 
-Planned and not yet built: `:core:schedule`, `:core:notify`, `:feature:*`.
+Planned and not yet built: `:feature:*`.
+
+**`:core:schedule` is pure Kotlin on purpose.** Recurrence is date arithmetic, so it has no
+Android in it and its tests run in milliseconds without Robolectric. Anything needing a
+database goes in `:core:data`, which owns the one table set.
+
+**The database is at version 3**, with hand-written migrations that are tested against real
+version 1 and 2 databases with data in them. Add a table, add a migration, and add it to
+`MigrationTest` before committing.
 
 **No DI framework.** `Tide` in `:core:data` is the object graph, by hand. One database, one
 repository, one process. If it grows past a handful of dependencies it should become Hilt.

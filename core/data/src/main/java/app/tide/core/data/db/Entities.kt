@@ -233,6 +233,30 @@ data class SkippedOccurrenceEntity(
 )
 
 /**
+ * What the app has actually told you.
+ *
+ * Two jobs. It is how the same fact is not said twice, and it is how a person
+ * can check what the app has been doing without taking its word for it. An app
+ * that notifies you and keeps no record is one you cannot audit.
+ *
+ * Keyed by the notification's key and the moment, so the history is kept
+ * rather than overwritten: the last time something was said is a query, not a
+ * column that forgets everything before it.
+ */
+@Entity(
+    tableName = "notification_ledger",
+    primaryKeys = ["notificationKey", "postedAt"],
+    indices = [Index("notificationKey"), Index("postedAt")],
+)
+data class NotificationLedgerEntity(
+    val notificationKey: String,
+    val title: String,
+    val tier: String,
+    val postedAt: Long,
+    val inDigest: Boolean = false,
+)
+
+/**
  * A working set with the muscles it trained, as the muscle map reads them.
  *
  * Not a table. This is the shape of a join, kept here so the query and the

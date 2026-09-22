@@ -10,7 +10,7 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 147 green, including 30 schedule and reconciler, and 2 on the version 1 to 2 migration |
+| Tests | 185 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
 | Screens rendering | Today, Session logger |
 | Screens wired to data | Session logger, Import, Muscle map |
 
@@ -84,11 +84,21 @@ no way yet to log a session you did yesterday from inside the app.
 **An exercise picker.** The logger opens on a hardcoded squat, because choosing a lift needs
 either routines or a browsable library and neither screen exists.
 
-## Then
+**3. Schedule and notify.** Both modules are built and tested. `:core:schedule` holds
+recurrence, occurrences and the reconciler; `:core:notify` holds tiers, channels, quiet
+hours, the digest and the ledger.
 
-**3. Schedule and notify.** `:core:schedule` (recurrence rules, occurrences, and the
-reconciler that resolves an occurrence from an existing record rather than asking) and
-`:core:notify` (tiers, channels, quiet hours, digest, ledger).
+The notification stance, written down because it is easy to erode: an interruption has a
+cost and the app pays it. The default is a quiet daily digest, `Default` waits for quiet
+hours to end, and only `Urgent` may break them. There are no engagement notifications, and
+there never will be: nothing here says you have not opened the app, nothing congratulates a
+streak, and nothing is sent to bring you back.
+
+**Not yet wired to anything.** There is no settings screen for quiet hours, no WorkManager
+job posting the digest, and no rule editor. The modules decide correctly and nothing calls
+them yet.
+
+## Then
 
 **Deferred from its original position.** These were planned before Training, on the grounds
 that four modules would otherwise each grow their own notification funnel. That reasoning
