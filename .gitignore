@@ -1,0 +1,43 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+/captures/
+.externalNativeBuild/
+.cxx/
+release/
+
+# Native build output (llama.cpp JNI)
+/**/src/main/jniLibs/
+/**/.cxx/
+
+# Model weights. Never committed, downloaded on first use.
+*.gguf
+*.task
+*.tflite
+
+# IDE
+.idea/
+*.iml
+.kotlin/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Signing. Never committed.
+keystore.properties
+*.jks
+*.keystore
+
+# Screenshot test output
+**/build/outputs/roborazzi/
