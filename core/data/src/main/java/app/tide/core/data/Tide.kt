@@ -6,6 +6,7 @@ import app.tide.core.data.db.Equipment
 import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.Muscle
 import app.tide.core.data.db.TideDatabase
+import app.tide.core.data.importer.TrainingImporter
 import app.tide.core.data.training.ProgressionRule
 import app.tide.core.data.training.RuleCodec
 import app.tide.core.data.training.TrainingRepository
@@ -59,6 +60,13 @@ object Tide {
                 ).also { repository = it }
             }
         }
+
+    /**
+     * Not cached, unlike the repository. An importer holds no state between
+     * runs, and one is built for a file and then finished with.
+     */
+    fun importer(context: Context): TrainingImporter =
+        db(context).let { TrainingImporter(exercises = it.exercises(), sessions = it.sessions()) }
 
     private suspend fun seedIfEmpty(db: TideDatabase) {
         if (db.exercises().byName("Back squat") != null) return

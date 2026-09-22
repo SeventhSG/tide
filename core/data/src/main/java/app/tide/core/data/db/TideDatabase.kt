@@ -28,6 +28,10 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercise ORDER BY name")
     fun observeAll(): Flow<List<ExerciseEntity>>
 
+    /** The whole library at once, for the importer to index before matching. */
+    @Query("SELECT * FROM exercise ORDER BY name")
+    suspend fun all(): List<ExerciseEntity>
+
     @Query("SELECT * FROM exercise WHERE id = :id")
     suspend fun byId(id: String): ExerciseEntity?
 

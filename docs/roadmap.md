@@ -10,12 +10,13 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 22 green: 15 pure progression, 7 round-trip on real SQLite |
+| Tests | 64 green: 15 pure progression, 7 repository round-trip, 34 importer and CSV, 3 viewmodel, 5 screenshot |
 | Screens rendering | Today, Session logger |
-| Screens wired to data | None yet |
+| Screens wired to data | Session logger |
 
-The app is not usable yet. Both screens render from hardcoded state; the repository
-underneath them is tested and working but nothing joins them.
+The session logger is real: it opens a session, prescribes from history, logs sets to the
+database and reads them back. Today is still hardcoded, and connecting it waits on the
+scheduler in phase 3.
 
 ## Done
 
@@ -40,15 +41,27 @@ across sessions, and resuming rather than forking an open session.
 **2d. Session logger and starter library.** The screen, and 38 exercises with a progression
 rule chosen per lift.
 
+**2e. The logger, wired.** `SessionViewModel` joining the screen to `TrainingRepository`.
+A plain class rather than `androidx.lifecycle.ViewModel`, because session resumption already
+lives in the repository, so a configuration change re-reads the open row instead of losing
+it. Screenshot tests now render from a real database rather than sample state, which caught
+a header reading "SET 3 OF 1" on an exercise with no history.
+
+**2f. Importers, the data layer.** FitNotes and Strong CSV: a real CSV reader, format
+detection by column rather than file name, pounds and distances converted, RPE read as reps
+in reserve, and warm-up markers preserved. Unmatched names become custom exercises rather
+than being dropped, and re-importing the same file does not double the history.
+
+Progression is deliberately not replayed over imported sessions. Imported sessions carry an
+`endedAt`, so `prescriptionFor` already falls back to the last session's working sets and
+produces a real target. Replaying the engine would manufacture stall counts from sessions
+whose warm-ups were never marked, and fire deloads from them.
+
 ## Next
 
-**2e. Wire the logger to the database.** The ViewModel joining `SessionScreen` to
-`TrainingRepository`. This is the step that turns rendered screens into an app you can train
-with, and everything below it is less valuable until it exists.
-
-**2f. Importers.** FitNotes and Strong CSV, matched against the exercise library, unmatched
-names becoming custom exercises. Plus retroactive logging. This is the difference between
-opening the app on day one to your training history and opening it to an empty screen.
+**2f, the rest.** The file picker and the import screen: choosing an export through the
+Storage Access Framework, showing what matched and what did not before committing, and
+retroactive logging as a user-facing action rather than only an importer flag.
 
 **2g. Muscle map.** Balance (volume per muscle over a window), fatigue (weighted by proximity
 to estimated 1RM, decaying smoothly rather than dropping out of a hard window), strength
