@@ -13,8 +13,8 @@ android {
         applicationId = "app.tide"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     buildTypes {
@@ -57,6 +57,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.health.connect)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

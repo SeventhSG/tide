@@ -10,9 +10,9 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 217 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
-| Screens rendering | Today, Session logger, Exercise picker, History, Notification settings |
-| Screens wired to data | Today, Session logger, Exercise picker, History, Import, Muscle map |
+| Tests | 245 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
+| Screens rendering | Today, Train, Body, Money, Ask, logger, picker, planner, history, settings |
+| Screens wired to data | Today, Train, Body, Ask, logger, picker, planner, history, import, muscle map |
 
 The session logger is real: it opens a session, prescribes from history, logs sets to the
 database and reads them back. Today reads the database too, and shows nothing it cannot
@@ -135,9 +135,33 @@ hours to end, and only `Urgent` may break them. There are no engagement notifica
 there never will be: nothing here says you have not opened the app, nothing congratulates a
 streak, and nothing is sent to bring you back.
 
+**v0.1.1, the rest of the shape.** Five sections behind the bottom bar, which stays put on
+all of them. **Train is a hub** rather than a door into a list: four counted figures over four
+weeks, then the ways in. **The week planner** arranges exercises per day in the order they
+will be done, and writes itself out as a schedule rule, which is what finally gives the daily
+summary something true to say. **Body reads Health Connect**, read-only, with four honest
+states. **Ask installs a model** onto the phone, resumable and removable, and says plainly
+that it cannot answer anything yet. **Money is an empty section that says so.**
+
+Smaller things in the same release: load and reps can be typed rather than only stepped, page
+hops move like water with a single crest of light, the app opens through a boot wave of surf
+and bubbles, settings is a glyph rather than a word, every exercise has a drawn mark, and the
+sea can be played from settings, generated rather than sampled.
+
+**Two licence decisions, written down.** The exercise images are **drawn in this repository**
+because no photo or animation set cleared the check that its own licence permits
+redistribution in an Apache-2.0 app. The ocean sound is **generated from noise** rather than
+sampled, so no audio file ships and nothing repeats. Both are replaceable the day a licensed
+source clears the check.
+
+**One bug worth recording.** Two overlapping reloads in the planner could finish out of order
+and leave the screen showing a plan that no longer existed. Both the planner and the calendar
+now serialise their reads behind a mutex, which is cheap and removes the class of bug rather
+than the instance.
+
 ## Next
 
-### Before v0.1.0
+### Before the next release
 
 Checked on 2026-09-22 and found not usable yet. A version tag claims "this runs and does what
 it says", and four things made that untrue. These come first, before anything new.

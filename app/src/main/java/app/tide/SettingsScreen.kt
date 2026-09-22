@@ -60,6 +60,9 @@ fun SettingsScreen(
     onQuietEndLater: () -> Unit = {},
     onRequestPermission: () -> Unit = {},
     onSendTest: () -> Unit = {},
+    onToggleSound: () -> Unit = {},
+    onSoundQuieter: () -> Unit = {},
+    onSoundLouder: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     OceanBackground(modifier, intensity = OceanIntensity.Subtle) {
@@ -191,6 +194,27 @@ fun SettingsScreen(
                     Spacer(Modifier.height(10.dp))
                     Text(it, style = LabelStyle, color = TideColors.TextFaint)
                 }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Card {
+                Toggle("THE SEA", state.soundPlaying, onToggleSound)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Surf, generated on the phone rather than played from a recording, so " +
+                        "it never repeats and ships no audio file. It plays while this " +
+                        "screen is open and stops when you leave.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TideColors.TextMuted,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Turn your volume down before the first time.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TideColors.TextFaint,
+                )
+                Spacer(Modifier.height(14.dp))
+                TimeRow("VOLUME", state.soundVolume, onSoundQuieter, onSoundLouder)
             }
 
             Spacer(Modifier.height(24.dp))

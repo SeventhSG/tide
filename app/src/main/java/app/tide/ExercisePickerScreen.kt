@@ -32,6 +32,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.tide.core.design.ContinuousCornerShape
+import app.tide.core.design.ExerciseArt
+import app.tide.core.design.tidePress
 import app.tide.core.design.DataStyle
 import app.tide.core.design.LabelStyle
 import app.tide.core.design.OceanBackground
@@ -156,13 +158,16 @@ private fun ExerciseRow(row: ExercisePickerUiState.Row, onPick: (String) -> Unit
             .clip(shape)
             .background(TideColors.SurfaceRaised)
             .border(1.dp, TideColors.Hairline, shape)
-            .clickable(role = Role.Button) { onPick(row.id) }
+            .tidePress { onPick(row.id) }
             // 56dp, like the logger's controls, because this is pressed with a
             // thumb in the same place and under the same conditions.
             .heightIn(min = 56.dp)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Drawn here rather than licensed from anyone. See ExerciseArt.
+        ExerciseArt(row.equipment.art(), row.muscle.region(), size = 38.dp)
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(row.name, style = MaterialTheme.typography.bodyLarge, color = TideColors.Text)
             Spacer(Modifier.height(2.dp))
@@ -240,15 +245,15 @@ private fun ExercisePickerPreview() {
                     ExercisePickerUiState.Section(
                         "RECENT",
                         listOf(
-                            ExercisePickerUiState.Row("squat", "Back squat", "BARBELL, QUADS", "YESTERDAY"),
-                            ExercisePickerUiState.Row("row", "Barbell row", "BARBELL, BACK", "3 DAYS AGO"),
+                            ExercisePickerUiState.Row(id = "squat", name = "Back squat", detail = "BARBELL, QUADS", lastTrained = "YESTERDAY"),
+                            ExercisePickerUiState.Row(id = "row", name = "Barbell row", detail = "BARBELL, BACK", lastTrained = "3 DAYS AGO"),
                         ),
                     ),
                     ExercisePickerUiState.Section(
                         "CHEST",
                         listOf(
-                            ExercisePickerUiState.Row("bench", "Bench press", "BARBELL", "4 DAYS AGO"),
-                            ExercisePickerUiState.Row("dip", "Dip", "BODYWEIGHT", null),
+                            ExercisePickerUiState.Row(id = "bench", name = "Bench press", detail = "BARBELL", lastTrained = "4 DAYS AGO"),
+                            ExercisePickerUiState.Row(id = "dip", name = "Dip", detail = "BODYWEIGHT", lastTrained = null),
                         ),
                     ),
                 ),

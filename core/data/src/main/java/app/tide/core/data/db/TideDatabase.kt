@@ -56,8 +56,17 @@ interface RoutineDao {
     @Query("SELECT * FROM routine WHERE archivedAt IS NULL ORDER BY createdAt")
     fun observeActive(): Flow<List<RoutineEntity>>
 
+    @Query("SELECT * FROM routine WHERE archivedAt IS NULL ORDER BY createdAt")
+    suspend fun active(): List<RoutineEntity>
+
     @Query("SELECT * FROM routine_exercise WHERE routineId = :routineId ORDER BY dayIndex, orderInDay")
     suspend fun exercisesFor(routineId: String): List<RoutineExerciseEntity>
+
+    @Query("SELECT * FROM routine_exercise WHERE routineId = :routineId ORDER BY dayIndex, orderInDay")
+    fun observeExercisesFor(routineId: String): Flow<List<RoutineExerciseEntity>>
+
+    @Query("DELETE FROM routine_exercise WHERE id = :id")
+    suspend fun deleteExercise(id: String)
 
     @Upsert suspend fun upsert(r: RoutineEntity)
     @Upsert suspend fun upsertExercise(e: RoutineExerciseEntity)

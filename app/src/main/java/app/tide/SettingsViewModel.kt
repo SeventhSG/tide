@@ -4,6 +4,7 @@ import app.tide.core.notify.Notifier
 import app.tide.core.notify.Tier
 import app.tide.core.notify.TideNotification
 import app.tide.notify.NotifyPreferences
+import app.tide.sound.OceanSoundPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,8 +27,11 @@ class SettingsViewModel(
     private val scope: CoroutineScope,
     /** Called whenever the digest time or its on/off state changes. */
     private val onScheduleChanged: (enabled: Boolean, at: LocalTime) -> Unit,
+    /** Null in tests, which have no audio device and must never make a sound. */
+    private val sound: OceanSoundPlayer? = null,
     private val now: () -> Instant = Instant::now,
 ) {
+    private var soundVolume = 0.5f
     private val _state = MutableStateFlow(read())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
 
@@ -69,6 +73,35 @@ class SettingsViewModel(
 
     fun onQuietEndLater() {
         prefs.quietEnd = prefs.quietEnd.plusHours(1)
+        render()
+    }
+
+    /**
+     * Starts or stops the sea.
+     *
+     * Only ever from this press. Nothing in Tide starts audio on its own: not
+     * at launch, not when a session starts, and not when a notification
+     * arrives.
+     */
+    fun onToggleSound() {
+        val player = sound ?: return
+        if (player.isPlaying) player.stop() else player.start()
+        render()
+    }
+
+    fun onSoundQuieter() = setVolume(soundVolume - 0.1f)
+
+    fun onSoundLouder() = setVolume(soundVolume + 0.1f)
+
+    private fun setVolume(value: Float) {
+        soundVolume = value.coerceIn(0f, 1f)
+        sound?.volume = soundVolume
+        render()
+    }
+
+    /** Called when the screen leaves, so the sea does not outlive it. */
+    fun onStopSound() {
+        sound?.stop()
         render()
     }
 
@@ -120,6 +153,8 @@ class SettingsViewModel(
         quietStart = prefs.quietStart.format(HourMinute),
         quietEnd = prefs.quietEnd.format(HourMinute),
         permissionGranted = notifier.canPost(),
+        soundPlaying = sound?.isPlaying == true,
+        soundVolume = "${(soundVolume * 100).toInt()}%",
     )
 
     private companion object {
@@ -137,4 +172,6 @@ data class SettingsUiState(
     val permissionGranted: Boolean = false,
     /** What happened to the last test, or null if none was sent this visit. */
     val lastTestResult: String? = null,
+    val soundPlaying: Boolean = false,
+    val soundVolume: String = "50%",
 )

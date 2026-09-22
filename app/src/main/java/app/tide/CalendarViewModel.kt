@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -37,6 +39,9 @@ class CalendarViewModel(
     private var month: YearMonth = YearMonth.from(Instant.ofEpochMilli(now()).atZone(zone))
     private var selected: LocalDate? = null
 
+    /** Month steps and day taps both reload, and must not land out of order. */
+    private val reads = Mutex()
+
     init {
         load()
     }
@@ -59,7 +64,7 @@ class CalendarViewModel(
     }
 
     private fun load() {
-        scope.launch {
+        scope.launch { reads.withLock {
             val from = month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
             val to = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
             val sessions = repository.sessionsBetween(from, to).filter { it.endedAt != null }
@@ -90,7 +95,7 @@ class CalendarViewModel(
                 monthSummary = summary(sessions.size, byDate.keys.size),
                 selected = selected?.let { day -> detail(day, byDate[day].orEmpty()) },
             )
-        }
+        } }
     }
 
     private suspend fun detail(date: LocalDate, sessions: List<SessionEntity>): CalendarUiState.DayDetail {

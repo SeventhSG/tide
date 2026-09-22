@@ -39,6 +39,8 @@ import app.tide.core.design.TideButton
 import app.tide.core.design.TideColors
 import app.tide.core.design.TideGhostButton
 import app.tide.core.design.TideTheme
+import app.tide.core.design.tidePress
+import androidx.compose.material3.Icon
 import app.tide.core.design.oceanScrimColor
 
 /**
@@ -190,10 +192,15 @@ private fun TopBar(onSettings: () -> Unit) {
             Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .clickable(role = Role.Button, onClick = onSettings),
+                .tidePress(onClick = onSettings),
             contentAlignment = Alignment.Center,
         ) {
-            Text("SETTINGS", style = LabelStyle, color = TideColors.TextMuted)
+            Icon(
+                TideIcons.Settings,
+                contentDescription = "Settings",
+                tint = TideColors.TextMuted,
+                modifier = Modifier.size(21.dp),
+            )
         }
     }
 }

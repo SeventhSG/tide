@@ -99,6 +99,8 @@ class ExercisePickerViewModel(
             id = e.id,
             name = e.name,
             detail = if (withMuscle) "$equipment, ${muscleLabel(e.primaryMuscle).uppercase()}" else equipment,
+            equipment = e.equipment,
+            muscle = e.primaryMuscle,
             lastTrained = lastTrained[e.id]?.let { sinceLabel(now() - it) },
         )
     }
@@ -134,6 +136,9 @@ data class ExercisePickerUiState(
         val name: String,
         /** Equipment, and the muscle where the section does not already say it. */
         val detail: String,
+        /** Both drive the drawn mark next to the row. */
+        val equipment: app.tide.core.data.db.Equipment? = null,
+        val muscle: Muscle? = null,
         /** Null for a lift with no history. It has never been trained, so nothing is shown. */
         val lastTrained: String?,
     )

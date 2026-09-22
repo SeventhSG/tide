@@ -1,6 +1,7 @@
 package app.tide
 
 import android.Manifest
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -9,31 +10,48 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import app.tide.ask.ModelInstaller
+import app.tide.body.AndroidHealthSource
+import app.tide.body.HealthSource
 import app.tide.core.data.Tide
 import app.tide.core.data.importer.TrainingImporter
 import app.tide.core.data.training.TrainingRepository
+import app.tide.core.design.BootWave
 import app.tide.core.design.TideTheme
+import app.tide.core.design.WaveTransition
 import app.tide.notify.DigestWorker
 import app.tide.notify.NotifyPreferences
-import androidx.compose.ui.platform.LocalContext
+import app.tide.notify.PlanSchedule
+import app.tide.sound.OceanSoundPlayer
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+/**
+ * Where a screen is.
+ *
+ * A [Section] keeps the bottom bar; the rest are places you go, do one thing,
+ * and come back from, so they take the whole screen. Hand written rather than
+ * Navigation-Compose: there are a dozen destinations, no deep links yet and no
+ * back stack worth the dependency.
+ */
 private sealed interface Screen {
-    data object Today : Screen
+    data class Main(val section: Section) : Screen
     data object Import : Screen
     data object Muscles : Screen
-    data object Picker : Screen
+    data class Picker(val addingToPlan: Boolean = false) : Screen
     data object Calendar : Screen
+    data object Planner : Screen
     data object Settings : Screen
     data class Session(val exerciseId: String) : Screen
 }
@@ -61,56 +79,145 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // Channels are the only notification control Android gives the user, so
-        // they exist from the first launch whether or not anything is ever
-        // posted. Creating one is free and idempotent.
+        // they exist from the first launch whether or not anything is posted.
         Tide.notifier(applicationContext).ensureChannels()
+
         setContent {
             TideTheme {
-                var screen by remember { mutableStateOf<Screen>(Screen.Today) }
-                when (val current = screen) {
-                    is Screen.Today -> WiredTodayScreen(
-                        repository = remember { Tide.training(applicationContext) },
-                        onStartSession = { screen = Screen.Picker },
-                        onImport = { screen = Screen.Import },
-                        onMuscles = { screen = Screen.Muscles },
-                        onCalendar = { screen = Screen.Calendar },
-                        onSettings = { screen = Screen.Settings },
-                    )
-                    is Screen.Picker -> WiredExercisePickerScreen(
-                        repository = remember { Tide.training(applicationContext) },
-                        onBack = { screen = Screen.Today },
-                        onPick = { screen = Screen.Session(it) },
-                    )
-                    is Screen.Session -> WiredSessionScreen(
-                        exerciseId = current.exerciseId,
-                        repository = remember { Tide.training(applicationContext) },
-                        // Back goes to the picker, not home: the session stays
-                        // open, so the next lift is logged into the same one.
-                        onBack = { screen = Screen.Picker },
-                        // Finished is different. There is no session left to
-                        // add to, so picking another lift here would start one.
-                        onFinished = { screen = Screen.Today },
-                    )
-                    is Screen.Calendar -> WiredCalendarScreen(
-                        repository = remember { Tide.training(applicationContext) },
-                        onBack = { screen = Screen.Today },
-                    )
-                    is Screen.Settings -> WiredSettingsScreen(
-                        onBack = { screen = Screen.Today },
-                    )
-                    is Screen.Muscles -> WiredMuscleMapScreen(
-                        repository = remember { Tide.training(applicationContext) },
-                        onBack = { screen = Screen.Today },
-                    )
-                    is Screen.Import -> WiredImportScreen(
-                        importer = remember { Tide.importer(applicationContext) },
-                        readText = ::readTextFromUri,
-                        onBack = { screen = Screen.Today },
-                    )
+                var booted by remember { mutableStateOf(false) }
+                var screen by remember { mutableStateOf<Screen>(Screen.Main(Section.Today)) }
+                var forward by remember { mutableStateOf(true) }
+
+                // The boot wave covers the first frames, during which the
+                // database opens anyway. It never holds anything back: the app
+                // is behind it, already composed.
+                if (!booted) {
+                    BootWave(Modifier.fillMaxSize()) { booted = true }
+                }
+
+                val go: (Screen, Boolean) -> Unit = { destination, deeper ->
+                    forward = deeper
+                    screen = destination
+                }
+
+                WaveTransition(
+                    target = screen,
+                    modifier = Modifier.fillMaxSize(),
+                    crest = screen is Screen.Main,
+                    forward = forward,
+                ) { current ->
+                    when (current) {
+                        is Screen.Main -> MainSection(
+                            section = current.section,
+                            onSelectSection = { go(Screen.Main(it), true) },
+                            go = go,
+                        )
+
+                        is Screen.Picker -> WiredExercisePickerScreen(
+                            repository = remember { Tide.training(applicationContext) },
+                            onBack = {
+                                go(
+                                    if (current.addingToPlan) Screen.Planner else Screen.Main(Section.Train),
+                                    false,
+                                )
+                            },
+                            onPick = { exerciseId ->
+                                if (current.addingToPlan) {
+                                    PlanHolder.pendingAdd = exerciseId
+                                    go(Screen.Planner, false)
+                                } else {
+                                    go(Screen.Session(exerciseId), true)
+                                }
+                            },
+                        )
+
+                        is Screen.Session -> WiredSessionScreen(
+                            exerciseId = current.exerciseId,
+                            repository = remember { Tide.training(applicationContext) },
+                            // Back goes to the picker, not home: the session
+                            // stays open, so the next lift joins the same one.
+                            onBack = { go(Screen.Picker(), false) },
+                            // Finished is different. There is no session left
+                            // to add to, so this goes back to the section.
+                            onFinished = { go(Screen.Main(Section.Train), false) },
+                        )
+
+                        is Screen.Planner -> WiredPlannerScreen(
+                            repository = remember { Tide.training(applicationContext) },
+                            onBack = { go(Screen.Main(Section.Train), false) },
+                            onAdd = { go(Screen.Picker(addingToPlan = true), true) },
+                        )
+
+                        is Screen.Calendar -> WiredCalendarScreen(
+                            repository = remember { Tide.training(applicationContext) },
+                            onBack = { go(Screen.Main(Section.Train), false) },
+                        )
+
+                        is Screen.Muscles -> WiredMuscleMapScreen(
+                            repository = remember { Tide.training(applicationContext) },
+                            onBack = { go(Screen.Main(Section.Train), false) },
+                        )
+
+                        is Screen.Settings -> WiredSettingsScreen(
+                            onBack = { go(Screen.Main(Section.Today), false) },
+                        )
+
+                        is Screen.Import -> WiredImportScreen(
+                            importer = remember { Tide.importer(applicationContext) },
+                            readText = ::readTextFromUri,
+                            onBack = { go(Screen.Main(Section.Today), false) },
+                        )
+                    }
                 }
             }
         }
     }
+
+    @Composable
+    private fun MainSection(
+        section: Section,
+        onSelectSection: (Section) -> Unit,
+        go: (Screen, Boolean) -> Unit,
+    ) {
+        TideScaffold(section = section, onSelectSection = onSelectSection) {
+            when (section) {
+                Section.Today -> WiredTodayScreen(
+                    repository = remember { Tide.training(applicationContext) },
+                    onStartSession = { go(Screen.Picker(), true) },
+                    onImport = { go(Screen.Import, true) },
+                    onMuscles = { go(Screen.Muscles, true) },
+                    onCalendar = { go(Screen.Calendar, true) },
+                    onSettings = { go(Screen.Settings, true) },
+                )
+
+                Section.Train -> WiredTrainScreen(
+                    repository = remember { Tide.training(applicationContext) },
+                    onStartSession = { go(Screen.Picker(), true) },
+                    onPlanner = { go(Screen.Planner, true) },
+                    onMuscles = { go(Screen.Muscles, true) },
+                    onHistory = { go(Screen.Calendar, true) },
+                    onExercises = { go(Screen.Picker(), true) },
+                )
+
+                Section.Body -> WiredBodyScreen()
+
+                Section.Money -> MoneyScreen()
+
+                Section.Ask -> WiredAskScreen()
+            }
+        }
+    }
+}
+
+/**
+ * The exercise the picker chose for the plan, on its way back to the planner.
+ *
+ * A single field rather than a navigation result, because the navigation here
+ * is a `when` over a sealed interface and threading a result through it would
+ * cost more than it saves. It is read once and cleared.
+ */
+private object PlanHolder {
+    var pendingAdd: String? = null
 }
 
 @Composable
@@ -142,76 +249,118 @@ private fun WiredTodayScreen(
 }
 
 @Composable
-private fun WiredCalendarScreen(
+private fun WiredTrainScreen(
     repository: TrainingRepository,
-    onBack: () -> Unit,
+    onStartSession: () -> Unit,
+    onPlanner: () -> Unit,
+    onMuscles: () -> Unit,
+    onHistory: () -> Unit,
+    onExercises: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val viewModel = remember { CalendarViewModel(repository, scope) }
-    val uiState by viewModel.state.collectAsState()
-
-    CalendarScreen(
-        state = uiState,
-        onBack = onBack,
-        onPreviousMonth = viewModel::onPreviousMonth,
-        onNextMonth = viewModel::onNextMonth,
-        onSelectDay = viewModel::onSelectDay,
-    )
-}
-
-@Composable
-private fun WiredSettingsScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    // Asked for here rather than at launch, at the moment the person turns the
-    // summary on. An app that asks before it has anything to say is asking for
-    // a habit, not for permission.
-    val permission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { }
-
-    val viewModel = remember {
-        val prefs = NotifyPreferences(context)
-        SettingsViewModel(
-            prefs = prefs,
-            notifier = Tide.notifier(context.applicationContext),
-            scope = scope,
-            onScheduleChanged = { enabled, at ->
-                if (enabled) {
-                    DigestWorker.schedule(context.applicationContext, at)
-                } else {
-                    DigestWorker.cancel(context.applicationContext)
-                }
-            },
-        )
-    }
+    val viewModel = remember { TrainViewModel(repository, scope) }
     val uiState by viewModel.state.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
-    SettingsScreen(
+    TrainScreen(
+        state = uiState,
+        onStartSession = onStartSession,
+        onPlanner = onPlanner,
+        onMuscles = onMuscles,
+        onHistory = onHistory,
+        onExercises = onExercises,
+    )
+}
+
+@Composable
+private fun WiredPlannerScreen(
+    repository: TrainingRepository,
+    onBack: () -> Unit,
+    onAdd: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val viewModel = remember {
+        PlannerViewModel(
+            repository = repository,
+            scope = scope,
+            planSchedule = PlanSchedule(repository, Tide.schedule(context.applicationContext)),
+        )
+    }
+    val uiState by viewModel.state.collectAsState()
+
+    // An exercise chosen in the picker lands here on the way back.
+    LaunchedEffect(Unit) {
+        PlanHolder.pendingAdd?.let {
+            PlanHolder.pendingAdd = null
+            viewModel.onAdd(it)
+        }
+        viewModel.refresh()
+    }
+
+    PlannerScreen(
         state = uiState,
         onBack = onBack,
-        onToggleDigest = {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        onSelectDay = viewModel::onSelectDay,
+        onAdd = onAdd,
+        onMoveUp = viewModel::onMoveUp,
+        onMoveDown = viewModel::onMoveDown,
+        onMoveToDay = viewModel::onMoveToDay,
+        onRemove = viewModel::onRemove,
+    )
+}
+
+@Composable
+private fun WiredBodyScreen() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val source = remember { AndroidHealthSource(context) }
+    val viewModel = remember { BodyViewModel(source, scope) }
+    val uiState by viewModel.state.collectAsState()
+
+    // Health Connect hands out its own permission sheet rather than Android's,
+    // through a contract the client exposes.
+    val permissions = rememberLauncherForActivityResult(
+        androidx.health.connect.client.PermissionController.createRequestPermissionResultContract(),
+    ) { viewModel.refresh() }
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
+    BodyScreen(
+        state = uiState,
+        onConnect = { runCatching { permissions.launch(HealthSource.PERMISSIONS) } },
+        onOpenHealthConnect = {
+            // The provider lives in the Play Store on most devices, and this is
+            // the intent Google documents for sending someone to get it.
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW).setData(
+                        Uri.parse(
+                            "market://details?id=com.google.android.apps.healthdata" +
+                                "&url=healthconnect%3A%2F%2Fonboarding",
+                        ),
+                    ),
+                )
             }
-            viewModel.onToggleDigest()
         },
-        onDigestEarlier = viewModel::onDigestEarlier,
-        onDigestLater = viewModel::onDigestLater,
-        onToggleQuietHours = viewModel::onToggleQuietHours,
-        onQuietStartEarlier = viewModel::onQuietStartEarlier,
-        onQuietStartLater = viewModel::onQuietStartLater,
-        onQuietEndEarlier = viewModel::onQuietEndEarlier,
-        onQuietEndLater = viewModel::onQuietEndLater,
-        onRequestPermission = {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        },
-        onSendTest = viewModel::onSendTest,
+    )
+}
+
+@Composable
+private fun WiredAskScreen() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val viewModel = remember { AskViewModel(ModelInstaller(context.applicationContext), scope) }
+    val uiState by viewModel.state.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
+    AskScreen(
+        state = uiState,
+        onInstall = viewModel::onInstall,
+        onCancel = viewModel::onCancel,
+        onRemove = viewModel::onRemove,
     )
 }
 
@@ -230,7 +379,7 @@ private fun WiredSessionScreen(
     // elapsed clock reads live rather than freezing between logged sets.
     LaunchedEffect(viewModel) {
         while (true) {
-            delay(1_000)
+            kotlinx.coroutines.delay(1_000)
             viewModel.tick()
         }
     }
@@ -270,6 +419,24 @@ private fun WiredExercisePickerScreen(
 }
 
 @Composable
+private fun WiredCalendarScreen(
+    repository: TrainingRepository,
+    onBack: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val viewModel = remember { CalendarViewModel(repository, scope) }
+    val uiState by viewModel.state.collectAsState()
+
+    CalendarScreen(
+        state = uiState,
+        onBack = onBack,
+        onPreviousMonth = viewModel::onPreviousMonth,
+        onNextMonth = viewModel::onNextMonth,
+        onSelectDay = viewModel::onSelectDay,
+    )
+}
+
+@Composable
 private fun WiredMuscleMapScreen(
     repository: TrainingRepository,
     onBack: () -> Unit,
@@ -282,6 +449,71 @@ private fun WiredMuscleMapScreen(
         state = uiState,
         onBack = onBack,
         onSelectView = viewModel::onSelectView,
+    )
+}
+
+@Composable
+private fun WiredSettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Asked for here rather than at launch, at the moment the person turns the
+    // summary on. An app that asks before it has anything to say is asking for
+    // a habit, not for permission.
+    val permission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+
+    val player = remember { OceanSoundPlayer(context) }
+    val viewModel = remember {
+        SettingsViewModel(
+            prefs = NotifyPreferences(context),
+            notifier = Tide.notifier(context.applicationContext),
+            scope = scope,
+            onScheduleChanged = { enabled, at ->
+                if (enabled) {
+                    DigestWorker.schedule(context.applicationContext, at)
+                } else {
+                    DigestWorker.cancel(context.applicationContext)
+                }
+            },
+            sound = player,
+        )
+    }
+    val uiState by viewModel.state.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
+    SettingsScreen(
+        state = uiState,
+        onBack = {
+            // Leaving the screen stops the sea. It is a thing you turn on while
+            // looking at it, not a service that outlives the screen.
+            viewModel.onStopSound()
+            onBack()
+        },
+        onToggleDigest = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            viewModel.onToggleDigest()
+        },
+        onDigestEarlier = viewModel::onDigestEarlier,
+        onDigestLater = viewModel::onDigestLater,
+        onToggleQuietHours = viewModel::onToggleQuietHours,
+        onQuietStartEarlier = viewModel::onQuietStartEarlier,
+        onQuietStartLater = viewModel::onQuietStartLater,
+        onQuietEndEarlier = viewModel::onQuietEndEarlier,
+        onQuietEndLater = viewModel::onQuietEndLater,
+        onRequestPermission = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        },
+        onSendTest = viewModel::onSendTest,
+        onToggleSound = viewModel::onToggleSound,
+        onSoundQuieter = viewModel::onSoundQuieter,
+        onSoundLouder = viewModel::onSoundLouder,
     )
 }
 

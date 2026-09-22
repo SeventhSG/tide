@@ -105,4 +105,79 @@ object TideIcons {
             moveTo(4f, 8f); lineTo(12f, 14f); lineTo(20f, 8f)
         }
     }
+
+    /** Settings: a dial with a mark on it, rather than the usual cog. */
+    val Settings: ImageVector by lazy {
+        icon("Settings") {
+            moveTo(12f, 4f)
+            curveTo(16.4f, 4f, 20f, 7.6f, 20f, 12f)
+            curveTo(20f, 16.4f, 16.4f, 20f, 12f, 20f)
+            curveTo(7.6f, 20f, 4f, 16.4f, 4f, 12f)
+            curveTo(4f, 7.6f, 7.6f, 4f, 12f, 4f)
+            close()
+            moveTo(12f, 7.5f); verticalLineTo(12f)
+            moveTo(12f, 12f); lineTo(15f, 14f)
+        }
+    }
+
+    /** Body: a drop, for weight and the measurements that come with it. */
+    val Drop: ImageVector by lazy {
+        icon("Drop") {
+            moveTo(12f, 3.5f)
+            curveTo(12f, 3.5f, 18f, 10f, 18f, 14f)
+            curveTo(18f, 17.3f, 15.3f, 20f, 12f, 20f)
+            curveTo(8.7f, 20f, 6f, 17.3f, 6f, 14f)
+            curveTo(6f, 10f, 12f, 3.5f, 12f, 3.5f)
+            close()
+        }
+    }
+
+    /** A speaker with one arc. Sound, at the volume this app uses it. */
+    val Sound: ImageVector by lazy {
+        icon("Sound") {
+            moveTo(4f, 9.5f); horizontalLineTo(7.5f); lineTo(12f, 5.5f)
+            verticalLineTo(18.5f); lineTo(7.5f, 14.5f); horizontalLineTo(4f)
+            close()
+            moveTo(15.5f, 9f)
+            curveTo(17f, 10.5f, 17f, 13.5f, 15.5f, 15f)
+        }
+    }
+
+    /** Move a row up or down in a plan. */
+    val ChevronUp: ImageVector by lazy {
+        icon("ChevronUp") {
+            moveTo(6f, 14.5f); lineTo(12f, 8.5f); lineTo(18f, 14.5f)
+        }
+    }
+
+    val ChevronDown: ImageVector by lazy {
+        icon("ChevronDown") {
+            moveTo(6f, 9.5f); lineTo(12f, 15.5f); lineTo(18f, 9.5f)
+        }
+    }
+
+    /** Remove a row. A plain cross, never a bin: this deletes a plan line. */
+    val Cross: ImageVector by lazy {
+        icon("Cross") {
+            moveTo(7f, 7f); lineTo(17f, 17f)
+            moveTo(17f, 7f); lineTo(7f, 17f)
+        }
+    }
+
+    val Calendar: ImageVector by lazy {
+        icon("Calendar") {
+            moveTo(5f, 6f); horizontalLineTo(19f)
+            curveTo(20f, 6f, 20.5f, 6.9f, 20.5f, 8f)
+            verticalLineTo(18f)
+            curveTo(20.5f, 19.1f, 20f, 20f, 19f, 20f)
+            horizontalLineTo(5f)
+            curveTo(4f, 20f, 3.5f, 19.1f, 3.5f, 18f)
+            verticalLineTo(8f)
+            curveTo(3.5f, 6.9f, 4f, 6f, 5f, 6f)
+            close()
+            moveTo(3.5f, 10f); horizontalLineTo(20.5f)
+            moveTo(8f, 4f); verticalLineTo(7.5f)
+            moveTo(16f, 4f); verticalLineTo(7.5f)
+        }
+    }
 }

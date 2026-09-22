@@ -38,6 +38,23 @@ import app.tide.core.design.OceanIntensity
 import app.tide.core.design.TideButton
 import app.tide.core.design.TideColors
 import app.tide.core.design.TideGhostButton
+import app.tide.core.design.tidePress
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import app.tide.core.design.TideTheme
 
 /**
@@ -257,6 +274,8 @@ fun SessionScreen(
                     onIncrement = {
                         onLoadChange((state.loadKg.toDoubleOrNull() ?: 0.0) + LoadStepKg)
                     },
+                    onTyped = { typed -> typed.toDoubleOrNull()?.let(onLoadChange) },
+                    decimal = true,
                 )
                 Spacer(Modifier.height(14.dp))
                 Stepper(
@@ -268,6 +287,8 @@ fun SessionScreen(
                     onIncrement = {
                         onRepsChange((state.reps.toIntOrNull() ?: 0) + 1)
                     },
+                    onTyped = { typed -> typed.toIntOrNull()?.let(onRepsChange) },
+                    decimal = false,
                 )
                 state.lastTime?.let {
                     Spacer(Modifier.height(12.dp))
@@ -491,13 +512,31 @@ private fun Hairline() {
 /** Load steps 2.5 kg at a tap, the smallest plate change worth a button press. */
 private const val LoadStepKg = 2.5
 
+/**
+ * A value with a step either side of it, and the value itself is typeable.
+ *
+ * The steps are for the common case, one plate or one rep at a time. Typing is
+ * for the case the steps are bad at: arriving at 62.5 from 20, or correcting a
+ * set you logged wrong. Tapping the number opens the number pad on it with the
+ * current value selected, so typing replaces rather than appends.
+ *
+ * The typed value commits as it is typed, and an unparseable string simply does
+ * not commit, so the field can be empty mid-edit without the state flickering
+ * to zero underneath the person's thumb.
+ */
 @Composable
 private fun Stepper(
     label: String,
     value: String,
     onDecrement: () -> Unit = {},
     onIncrement: () -> Unit = {},
+    onTyped: (String) -> Unit = {},
+    decimal: Boolean = false,
 ) {
+    var editing by remember { mutableStateOf(false) }
+    var draft by remember(value) { mutableStateOf(TextFieldValue(value)) }
+    val focus = remember { FocusRequester() }
+
     Column {
         Text(label, style = LabelStyle, color = TideColors.TextFaint)
         Spacer(Modifier.height(9.dp))
@@ -512,15 +551,53 @@ private fun Stepper(
                     .weight(1f)
                     .height(56.dp)
                     .clip(ContinuousCornerShape(16.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
-                    .border(1.dp, TideColors.Hairline, ContinuousCornerShape(16.dp)),
+                    .background(Color.White.copy(alpha = if (editing) 0.09f else 0.05f))
+                    .border(
+                        1.dp,
+                        if (editing) TideColors.Accent.copy(alpha = 0.55f) else TideColors.Hairline,
+                        ContinuousCornerShape(16.dp),
+                    )
+                    .then(
+                        if (editing) {
+                            Modifier
+                        } else {
+                            Modifier.tidePress(role = Role.Button) {
+                                draft = TextFieldValue(value, TextRange(0, value.length))
+                                editing = true
+                            }
+                        },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    value,
-                    style = DataStyle.copy(fontSize = MaterialTheme.typography.titleLarge.fontSize),
+                val style = DataStyle.copy(
+                    fontSize = MaterialTheme.typography.titleLarge.fontSize,
                     color = TideColors.Text,
+                    textAlign = TextAlign.Center,
                 )
+                if (editing) {
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = {
+                            draft = it
+                            onTyped(it.text)
+                        },
+                        singleLine = true,
+                        textStyle = style,
+                        cursorBrush = SolidColor(TideColors.Accent),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Number,
+                            imeAction = ImeAction.Done,
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { editing = false }),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focus)
+                            .onFocusChanged { if (!it.isFocused) editing = false },
+                    )
+                    LaunchedEffect(Unit) { focus.requestFocus() }
+                } else {
+                    Text(value.ifEmpty { "-" }, style = style, color = TideColors.Text)
+                }
             }
             StepButton("+", onIncrement)
         }
@@ -535,7 +612,7 @@ private fun StepButton(label: String, onClick: () -> Unit = {}) {
             .clip(ContinuousCornerShape(16.dp))
             .background(Color.White.copy(alpha = 0.06f))
             .border(1.dp, TideColors.Hairline, ContinuousCornerShape(16.dp))
-            .clickable(role = Role.Button, onClick = onClick),
+            .tidePress(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, style = DataStyle, color = TideColors.TextMuted)

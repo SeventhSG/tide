@@ -60,7 +60,7 @@ class DigestWorker(
             TideNotification(
                 key = "schedule.${resolved.occurrence.ruleId}.${resolved.occurrence.due}",
                 title = titles[resolved.occurrence.ruleId] ?: "Scheduled",
-                body = "Due ${resolved.occurrence.due}.",
+                body = bodyFor(resolved.occurrence.due, today),
                 tier = Tier.Quiet,
                 createdAt = Instant.now(),
             )
@@ -70,6 +70,13 @@ class DigestWorker(
         val digest = NotifyPolicy.digest(items, Instant.now()) ?: return Result.success()
         notifier.post(digest, inDigest = true)
         return Result.success()
+    }
+
+    /** Plain, and never a reproach: what is due, on which day, and nothing else. */
+    private fun bodyFor(due: LocalDate, today: LocalDate): String = when {
+        due == today -> "Planned for today."
+        due == today.plusDays(1) -> "Planned for tomorrow."
+        else -> "Planned for $due."
     }
 
     companion object {

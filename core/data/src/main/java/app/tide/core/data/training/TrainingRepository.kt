@@ -8,6 +8,8 @@ import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.ExerciseStateDao
 import app.tide.core.data.db.ExerciseStateEntity
 import app.tide.core.data.db.RoutineDao
+import app.tide.core.data.db.RoutineEntity
+import app.tide.core.data.db.RoutineExerciseEntity
 import app.tide.core.data.db.SessionDao
 import app.tide.core.data.db.SessionEntity
 import app.tide.core.data.db.SetKind
@@ -152,6 +154,104 @@ class TrainingRepository(
             if (result != null) results += ExerciseProgression(exerciseId, result)
         }
         return results
+    }
+
+    // --- the week's plan --------------------------------------------------
+
+    /**
+     * The plan, created on first use.
+     *
+     * One routine, seven days, because a person has one week. Several routines
+     * is a real thing people want eventually and it is not what makes the first
+     * version useful: what makes it useful is that Monday knows what Monday is.
+     */
+    suspend fun plan(): RoutineEntity {
+        routines.active().firstOrNull()?.let { return it }
+        val routine = RoutineEntity(
+            id = newId(),
+            name = "My week",
+            defaultProgressionRule = RuleCodec.encode(ProgressionRule.Linear()),
+            createdAt = now(),
+        )
+        routines.upsert(routine)
+        return routine
+    }
+
+    /** Every planned exercise, by day, in the order they are meant to be done. */
+    suspend fun planDays(): Map<Int, List<PlannedExercise>> {
+        val routine = plan()
+        val library = exercises.all().associateBy { it.id }
+        return routines.exercisesFor(routine.id)
+            .groupBy { it.dayIndex }
+            .mapValues { (_, rows) ->
+                rows.sortedBy { it.orderInDay }.map { row ->
+                    PlannedExercise(
+                        id = row.id,
+                        exerciseId = row.exerciseId,
+                        name = library[row.exerciseId]?.name ?: row.exerciseId,
+                        equipment = library[row.exerciseId]?.equipment,
+                        primaryMuscle = library[row.exerciseId]?.primaryMuscle,
+                        orderInDay = row.orderInDay,
+                        targetSets = row.targetSets,
+                        targetReps = row.targetReps,
+                    )
+                }
+            }
+    }
+
+    /** Appends to the end of a day. New work goes last until it is moved. */
+    suspend fun addToPlan(dayIndex: Int, exerciseId: String, sets: Int = 3, reps: Int = 5) {
+        val routine = plan()
+        val existing = routines.exercisesFor(routine.id).filter { it.dayIndex == dayIndex }
+        routines.upsertExercise(
+            RoutineExerciseEntity(
+                id = newId(),
+                routineId = routine.id,
+                exerciseId = exerciseId,
+                dayIndex = dayIndex,
+                orderInDay = (existing.maxOfOrNull { it.orderInDay } ?: -1) + 1,
+                targetSets = sets,
+                targetReps = reps,
+            ),
+        )
+    }
+
+    suspend fun removeFromPlan(plannedId: String) = routines.deleteExercise(plannedId)
+
+    /**
+     * Moves one exercise up or down inside its day.
+     *
+     * The order is rewritten for the whole day rather than by swapping two
+     * numbers, so a plan that was already out of order because of a deletion
+     * comes back consecutive instead of preserving the gap.
+     */
+    suspend fun movePlanned(plannedId: String, up: Boolean) {
+        val routine = plan()
+        val all = routines.exercisesFor(routine.id)
+        val row = all.firstOrNull { it.id == plannedId } ?: return
+        val day = all.filter { it.dayIndex == row.dayIndex }.sortedBy { it.orderInDay }.toMutableList()
+        val index = day.indexOfFirst { it.id == plannedId }
+        val target = if (up) index - 1 else index + 1
+        if (target !in day.indices) return
+
+        day.add(target, day.removeAt(index))
+        day.forEachIndexed { i, entry ->
+            if (entry.orderInDay != i) routines.upsertExercise(entry.copy(orderInDay = i))
+        }
+    }
+
+    /** Moves an exercise to another day, landing at the end of it. */
+    suspend fun movePlannedToDay(plannedId: String, dayIndex: Int) {
+        val routine = plan()
+        val all = routines.exercisesFor(routine.id)
+        val row = all.firstOrNull { it.id == plannedId } ?: return
+        val target = all.filter { it.dayIndex == dayIndex }
+        routines.upsertExercise(
+            row.copy(
+                dayIndex = dayIndex,
+                orderInDay = (target.maxOfOrNull { it.orderInDay } ?: -1) + 1,
+            ),
+        )
     }
 
     // --- sets -------------------------------------------------------------
@@ -316,6 +416,18 @@ class TrainingRepository(
     }
 
 }
+
+/** One exercise as it sits in the week's plan. */
+data class PlannedExercise(
+    val id: String,
+    val exerciseId: String,
+    val name: String,
+    val equipment: app.tide.core.data.db.Equipment?,
+    val primaryMuscle: app.tide.core.data.db.Muscle?,
+    val orderInDay: Int,
+    val targetSets: Int,
+    val targetReps: Int,
+)
 
 /** One exercise as it appears looking back at a day. */
 data class SessionExerciseSummary(
