@@ -1,3 +1,5 @@
+<img src="brand/keel-192.png" alt="" width="96" align="left" hspace="12">
+
 # Keel
 
 A private life dashboard for Android. Training, body, commitments and a small local model,
@@ -60,7 +62,9 @@ get away with. The reference is a ship's instrument panel: legible at arm's leng
 light, and honest when the reading is boring. Built on Material 3 Expressive rather than a
 custom system, because the native one is better than anything worth reinventing here.
 
-See [docs/design-system.md](docs/design-system.md).
+See [docs/design-system.md](docs/design-system.md) and [docs/brand.md](docs/brand.md).
+
+The mark is a hull seen end-on with the keel below it, which is what the app claims to be.
 
 ## Stack
 

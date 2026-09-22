@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <title>Keel</title>
+  <!-- Hull section: a shell of constant wall thickness, flat deck edge at each
+       end. Beam 68, draft 26, wall 12. Symmetric about x=54 so every Android
+       launcher mask crops it identically. -->
+  <path fill="#3FA98B" d="M20 34 Q54 86 88 34 L80 34 Q54 62 28 34 Z"/>
+  <!-- Keel blade, rooted inside the shell wall. -->
+  <path fill="#3FA98B" d="M49.5 52 L58.5 52 L57 80 A3 3 0 0 1 51 80 Z"/>
+</svg>
