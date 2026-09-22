@@ -301,7 +301,7 @@ private fun ConfirmFinish(setCount: Int, workingCount: Int, onCancel: () -> Unit
     Card {
         Text(
             "Finish this session?",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.labelLarge,
             color = TideColors.Text,
         )
         Spacer(Modifier.height(6.dp))
@@ -377,7 +377,7 @@ private fun SummaryContent(summary: SessionSummary, onDone: () -> Unit) {
                 }
                 else -> summary.exercises.forEach { d ->
                     Card {
-                        Text(d.exerciseName, style = MaterialTheme.typography.titleMedium, color = TideColors.Text)
+                        Text(d.exerciseName, style = MaterialTheme.typography.labelLarge, color = TideColors.Text)
                         Spacer(Modifier.height(4.dp))
                         Text(d.reason, style = MaterialTheme.typography.bodyMedium, color = TideColors.TextMuted)
                         Spacer(Modifier.height(12.dp))

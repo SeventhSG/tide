@@ -27,15 +27,9 @@ private sealed interface Screen {
     data object Today : Screen
     data object Import : Screen
     data object Muscles : Screen
+    data object Picker : Screen
     data class Session(val exerciseId: String) : Screen
 }
-
-/**
- * No exercise picker yet, that is routine and day-of-week UI which has not
- * been built. Squat is the first seeded exercise, so it stands in as the
- * only door into the logger until a real one exists.
- */
-private const val DEFAULT_EXERCISE_ID = "squat"
 
 class MainActivity : ComponentActivity() {
 
@@ -63,14 +57,24 @@ class MainActivity : ComponentActivity() {
                 var screen by remember { mutableStateOf<Screen>(Screen.Today) }
                 when (val current = screen) {
                     is Screen.Today -> TodayScreen(
-                        onStartSession = { screen = Screen.Session(DEFAULT_EXERCISE_ID) },
+                        onStartSession = { screen = Screen.Picker },
                         onImport = { screen = Screen.Import },
                         onMuscles = { screen = Screen.Muscles },
+                    )
+                    is Screen.Picker -> WiredExercisePickerScreen(
+                        repository = remember { Tide.training(applicationContext) },
+                        onBack = { screen = Screen.Today },
+                        onPick = { screen = Screen.Session(it) },
                     )
                     is Screen.Session -> WiredSessionScreen(
                         exerciseId = current.exerciseId,
                         repository = remember { Tide.training(applicationContext) },
-                        onBack = { screen = Screen.Today },
+                        // Back goes to the picker, not home: the session stays
+                        // open, so the next lift is logged into the same one.
+                        onBack = { screen = Screen.Picker },
+                        // Finished is different. There is no session left to
+                        // add to, so picking another lift here would start one.
+                        onFinished = { screen = Screen.Today },
                     )
                     is Screen.Muscles -> WiredMuscleMapScreen(
                         repository = remember { Tide.training(applicationContext) },
@@ -92,6 +96,7 @@ private fun WiredSessionScreen(
     exerciseId: String,
     repository: TrainingRepository,
     onBack: () -> Unit,
+    onFinished: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val viewModel = remember(exerciseId) { SessionViewModel(exerciseId, repository, scope) }
@@ -115,7 +120,25 @@ private fun WiredSessionScreen(
         onFinishRequested = viewModel::onFinishRequested,
         onFinishCancelled = viewModel::onFinishCancelled,
         onFinishConfirmed = viewModel::onFinishConfirmed,
-        onDone = onBack,
+        onDone = onFinished,
+    )
+}
+
+@Composable
+private fun WiredExercisePickerScreen(
+    repository: TrainingRepository,
+    onBack: () -> Unit,
+    onPick: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val viewModel = remember { ExercisePickerViewModel(repository, scope) }
+    val uiState by viewModel.state.collectAsState()
+
+    ExercisePickerScreen(
+        state = uiState,
+        onBack = onBack,
+        onQueryChange = viewModel::onQueryChange,
+        onPick = onPick,
     )
 }
 

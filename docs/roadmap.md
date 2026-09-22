@@ -10,9 +10,9 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 192 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
-| Screens rendering | Today, Session logger |
-| Screens wired to data | Session logger, Import, Muscle map |
+| Tests | 200 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
+| Screens rendering | Today, Session logger, Exercise picker |
+| Screens wired to data | Session logger, Exercise picker, Import, Muscle map |
 
 The session logger is real: it opens a session, prescribes from history, logs sets to the
 database and reads them back. Today is still hardcoded, and connecting it waits on the
@@ -83,6 +83,13 @@ target. Finishing is enforced to happen once: a second finish decides nothing, s
 tap cannot add the increment twice. A session with nothing in it is deleted rather than
 recorded, because opening the logger and backing out is not a workout.
 
+**The exercise picker.** Start session opens the library instead of a hardcoded squat.
+Recent lifts first, with the date each was really last trained, then grouped by muscle, with
+search running in SQL so the screen still works at 1,300 rows rather than 38. Back from the
+logger returns to the picker and the session stays open, so a second lift is logged into the
+same session. The ocean is off here, as on the logger: this is a screen scrolled in a gym,
+and eyebrow labels over moving water fail the contrast rule.
+
 **3. Schedule and notify, the modules.** `:core:schedule` holds recurrence, occurrences and
 the reconciler; `:core:notify` holds tiers, channels, quiet hours, the digest and the ledger.
 Both are tested and neither is wired to a screen yet.
@@ -101,8 +108,7 @@ Checked on 2026-09-22 and found not usable yet. A version tag claims "this runs 
 it says", and four things made that untrue. These come first, before anything new.
 
 1. ~~**Finish a session.**~~ Done, see above.
-2. **An exercise picker.** 38 exercises are seeded, but the logger opens on a hardcoded squat
-   and there is no way to reach the other 37.
+2. ~~**An exercise picker.**~~ Done, see above.
 3. **Today shows real numbers or none.** Volume, sleep, heart rate, renewals, backup and the
    week strip are all hardcoded. Shipping them breaks the rule that a number is real, labelled
    as sample data, or absent. Volume can come from the database now; the rest has no source

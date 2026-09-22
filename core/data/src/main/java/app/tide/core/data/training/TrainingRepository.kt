@@ -43,6 +43,19 @@ class TrainingRepository(
 
     suspend fun exerciseById(exerciseId: String): ExerciseEntity? = exercises.byId(exerciseId)
 
+    /**
+     * The library, filtered by what was typed. A blank query returns all of it.
+     *
+     * Filtering happens in SQL rather than over a list in a screen, because the
+     * starter set is 38 and the library this is built for is about 1,300.
+     */
+    suspend fun library(query: String = ""): List<ExerciseEntity> =
+        if (query.isBlank()) exercises.all() else exercises.search(query.trim())
+
+    /** When each exercise was last worked, warm-ups excluded, as SQL decides. */
+    suspend fun lastTrainedByExercise(): Map<String, Long> =
+        sessions.lastTrainedPerExercise().associate { it.exerciseId to it.lastAt }
+
     // --- sessions ---------------------------------------------------------
 
     /**
