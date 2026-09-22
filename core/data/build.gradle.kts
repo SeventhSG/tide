@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -9,6 +10,9 @@ android {
 
     defaultConfig {
         minSdk = 26
+        // Schemas are committed. A migration you cannot diff is a migration you
+        // cannot review, and this database holds the only copy of the data.
+        ksp { arg("room.schemaLocation", "$projectDir/schemas") }
     }
 
     compileOptions {
@@ -19,8 +23,19 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    sourceSets {
+        getByName("test").assets.srcDir("$projectDir/schemas")
+    }
 }
 
 dependencies {
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    implementation(libs.kotlinx.coroutines.core)
+    ksp(libs.room.compiler)
+
     testImplementation(libs.junit)
+    testImplementation(libs.room.testing)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
