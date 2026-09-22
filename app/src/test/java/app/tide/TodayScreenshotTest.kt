@@ -79,11 +79,11 @@ class TodayScreenshotTest {
                             reps = "7",
                             lastTime = "80 kg x 7",
                             elapsed = "00:42:18",
-                            restRemaining = "1:47",
+                            restSinceLastSet = "1:47",
                             logged = listOf(
-                                SessionUiState.LoggedSet("W", "60 kg x 8", null, true),
-                                SessionUiState.LoggedSet("1", "82.5 kg x 8", "RIR 2", false),
-                                SessionUiState.LoggedSet("2", "82.5 kg x 7", "RIR 1", false),
+                                SessionUiState.LoggedSet(index = "W", summary = "60 kg x 8", rir = null, isWarmUp = true),
+                                SessionUiState.LoggedSet(index = "1", summary = "82.5 kg x 8", rir = "RIR 2", isWarmUp = false),
+                                SessionUiState.LoggedSet(index = "2", summary = "82.5 kg x 7", rir = "RIR 1", isWarmUp = false),
                             ),
                         ),
                     )

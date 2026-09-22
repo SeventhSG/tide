@@ -1,6 +1,7 @@
 package app.tide
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -66,6 +69,8 @@ fun TodayScreen(
     onStartSession: () -> Unit = {},
     onImport: () -> Unit = {},
     onMuscles: () -> Unit = {},
+    onCalendar: () -> Unit = {},
+    onSettings: () -> Unit = {},
 ) {
     OceanBackground(modifier) {
         Column(Modifier.fillMaxSize()) {
@@ -76,7 +81,7 @@ fun TodayScreen(
                     .statusBarsPadding()
                     .padding(horizontal = 20.dp),
             ) {
-                TopBar()
+                TopBar(onSettings)
 
                 Spacer(Modifier.height(26.dp))
                 Text(state.dateLabel, style = LabelStyle, color = TideColors.TextFaint)
@@ -127,6 +132,13 @@ fun TodayScreen(
                 // after it.
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TideGhostButton(onClick = onCalendar, modifier = Modifier.weight(1f)) {
+                        Text(
+                            "History",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = TideColors.TextMuted,
+                        )
+                    }
                     TideGhostButton(onClick = onMuscles, modifier = Modifier.weight(1f)) {
                         Text(
                             "Muscle map",
@@ -134,13 +146,14 @@ fun TodayScreen(
                             color = TideColors.TextMuted,
                         )
                     }
-                    TideGhostButton(onClick = onImport, modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Import",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = TideColors.TextMuted,
-                        )
-                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                TideGhostButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Import a history",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TideColors.TextMuted,
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -166,13 +179,22 @@ fun TodayScreen(
  * count and it comes back with the module that can count one.
  */
 @Composable
-private fun TopBar() {
+private fun TopBar(onSettings: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("TIDE", style = LabelStyle, color = TideColors.TextMuted)
         Spacer(Modifier.weight(1f))
+        Box(
+            Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClick = onSettings),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("SETTINGS", style = LabelStyle, color = TideColors.TextMuted)
+        }
     }
 }
 

@@ -9,6 +9,8 @@ import app.tide.core.data.db.MIGRATION_1_2
 import app.tide.core.data.db.MIGRATION_2_3
 import app.tide.core.data.db.TideDatabase
 import app.tide.core.data.importer.TrainingImporter
+import app.tide.core.data.notify.RoomNotificationLedger
+import app.tide.core.notify.Notifier
 import app.tide.core.data.schedule.ScheduleRepository
 import app.tide.core.data.training.ProgressionRule
 import app.tide.core.data.training.RuleCodec
@@ -31,6 +33,7 @@ object Tide {
     @Volatile private var database: TideDatabase? = null
     @Volatile private var repository: TrainingRepository? = null
     @Volatile private var scheduleRepository: ScheduleRepository? = null
+    @Volatile private var notifier: Notifier? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -70,6 +73,23 @@ object Tide {
         scheduleRepository ?: synchronized(this) {
             scheduleRepository ?: ScheduleRepository(db(context).schedule())
                 .also { scheduleRepository = it }
+        }
+
+    /**
+     * The one notifier, over the one ledger.
+     *
+     * Built here rather than in the app so there is a single instance writing
+     * the ledger: two would each think a notification had not been said yet and
+     * the dedupe window would stop working.
+     */
+    fun notifier(context: Context): Notifier =
+        notifier ?: synchronized(this) {
+            notifier ?: db(context).let { d ->
+                Notifier(
+                    context = context.applicationContext,
+                    ledger = RoomNotificationLedger(d.notificationLedger()),
+                ).also { notifier = it }
+            }
         }
 
     /**

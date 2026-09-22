@@ -45,6 +45,8 @@ class SessionViewModel(
     private var reps = 0
     private var latestSets: List<WorkoutSetEntity> = emptyList()
     private var sessionSets: List<WorkoutSetEntity> = emptyList()
+    private var warmUp = false
+    private var pendingRemoveId: String? = null
     private var confirmingFinish = false
     private var finishing = false
     private var summary: SessionSummary? = null
@@ -91,12 +93,42 @@ class SessionViewModel(
     /** Called on a UI tick to keep the elapsed clock live between logged sets. */
     fun tick() = render()
 
+    /**
+     * Marks what comes next as a warm-up.
+     *
+     * The single most important flag in the schema, and until now the app could
+     * not set it: every set logged here counted toward progression, a 1RM and
+     * the muscle map, which is exactly the corruption the warm-up filter exists
+     * to prevent.
+     */
+    fun onToggleWarmUp() {
+        warmUp = !warmUp
+        render()
+    }
+
+    /** First tap asks, second tap removes. Nothing is deleted on one touch. */
+    fun onRowTapped(setId: String) {
+        pendingRemoveId = if (pendingRemoveId == setId) null else setId
+        render()
+    }
+
+    fun onRemoveSet(setId: String) {
+        pendingRemoveId = null
+        scope.launch { repository.deleteSet(setId) }
+        render()
+    }
+
     fun onLogSet() {
         val id = sessionId ?: return
         val currentLoad = loadKg
         val currentReps = reps
+        val kind = if (warmUp) SetKind.WarmUp else SetKind.Standard
         scope.launch {
-            repository.logSet(id, exerciseId, loadKg = currentLoad, reps = currentReps)
+            repository.logSet(id, exerciseId, kind, loadKg = currentLoad, reps = currentReps)
+            // One warm-up at a time. Leaving the toggle on is how a working set
+            // gets logged as a warm-up and quietly vanishes from progression.
+            warmUp = false
+            render()
         }
     }
 
@@ -156,7 +188,13 @@ class SessionViewModel(
             reps = reps.toString(),
             lastTime = lastTime,
             elapsed = formatElapsed(now() - startedAt),
-            restRemaining = null,
+            // Time since the last set went in, counted up. No target to count
+            // down to: nothing in the app has said how long your rest should
+            // be, and inventing 90 seconds would be inventing a prescription.
+            restSinceLastSet = sessionSets.maxOfOrNull { it.completedAt }
+                ?.let { formatRest(now() - it) },
+            warmUp = warmUp,
+            pendingRemoveId = pendingRemoveId,
             logged = logged,
             sessionSetCount = sessionSets.size,
             workingSetCount = sessionSets.count { it.countsTowardProgression },
@@ -174,6 +212,7 @@ class SessionViewModel(
             val isWarmUp = s.kind == SetKind.WarmUp
             val label = if (isWarmUp) "W" else (++working).toString()
             SessionUiState.LoggedSet(
+                id = s.id,
                 index = label,
                 summary = formatSet(s.loadKg, s.reps, s.durationSec),
                 rir = s.rir?.let { "RIR $it" },
@@ -193,7 +232,7 @@ class SessionViewModel(
             reps = "",
             lastTime = null,
             elapsed = "00:00:00",
-            restRemaining = null,
+            restSinceLastSet = null,
             logged = emptyList(),
         )
     }
@@ -220,6 +259,12 @@ private fun formatElapsed(ms: Long): String {
     val m = (totalSec % 3600) / 60
     val s = totalSec % 60
     return "%02d:%02d:%02d".format(h, m, s)
+}
+
+/** Minutes and seconds, which is the unit rest is counted in. */
+private fun formatRest(ms: Long): String {
+    val totalSec = (ms / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(totalSec / 60, totalSec % 60)
 }
 
 /**

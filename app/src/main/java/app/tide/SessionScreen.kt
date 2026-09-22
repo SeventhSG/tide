@@ -71,7 +71,12 @@ data class SessionUiState(
     val reps: String,
     val lastTime: String?,
     val elapsed: String,
-    val restRemaining: String?,
+    /** Time since the last set was logged. Counted up, never down. */
+    val restSinceLastSet: String? = null,
+    /** True when the next set will be logged as a warm-up. */
+    val warmUp: Boolean = false,
+    /** The set a tap has offered to remove. The second tap does it. */
+    val pendingRemoveId: String? = null,
     val logged: List<LoggedSet>,
     /** Every set in the session, any exercise, warm-ups included. */
     val sessionSetCount: Int = 0,
@@ -82,6 +87,7 @@ data class SessionUiState(
     val summary: SessionSummary? = null,
 ) {
     data class LoggedSet(
+        val id: String = "",
         val index: String,
         val summary: String,
         val rir: String?,
@@ -114,6 +120,9 @@ fun SessionScreen(
     onLoadChange: (Double) -> Unit = {},
     onRepsChange: (Int) -> Unit = {},
     onLogSet: () -> Unit = {},
+    onToggleWarmUp: () -> Unit = {},
+    onRowTapped: (String) -> Unit = {},
+    onRemoveSet: (String) -> Unit = {},
     onFinishRequested: () -> Unit = {},
     onFinishCancelled: () -> Unit = {},
     onFinishConfirmed: () -> Unit = {},
@@ -184,8 +193,12 @@ fun SessionScreen(
             Spacer(Modifier.height(16.dp))
             Card {
                 state.logged.forEachIndexed { i, s ->
+                    val pending = s.id.isNotEmpty() && s.id == state.pendingRemoveId
                     Row(
-                        Modifier.fillMaxWidth().padding(vertical = 9.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(role = Role.Button) { onRowTapped(s.id) }
+                            .padding(vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
@@ -200,11 +213,26 @@ fun SessionScreen(
                             color = if (s.isWarmUp) TideColors.TextMuted else TideColors.Text,
                             modifier = Modifier.weight(1f),
                         )
-                        Text(
-                            s.rir ?: if (s.isWarmUp) "warm-up" else "",
-                            style = LabelStyle,
-                            color = if (s.isWarmUp) TideColors.TextFaint else TideColors.Accent,
-                        )
+                        if (pending) {
+                            // Red, because deleting a logged set is the one
+                            // destructive thing on this screen. It is a real
+                            // semantic state, not decoration.
+                            Box(
+                                Modifier
+                                    .clip(ContinuousCornerShape(12.dp))
+                                    .background(TideColors.Critical.copy(alpha = 0.16f))
+                                    .clickable(role = Role.Button) { onRemoveSet(s.id) }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            ) {
+                                Text("REMOVE", style = LabelStyle, color = TideColors.Critical)
+                            }
+                        } else {
+                            Text(
+                                s.rir ?: if (s.isWarmUp) "warm-up" else "",
+                                style = LabelStyle,
+                                color = if (s.isWarmUp) TideColors.TextFaint else TideColors.Accent,
+                            )
+                        }
                     }
                     if (i < state.logged.lastIndex) Hairline()
                 }
@@ -247,7 +275,7 @@ fun SessionScreen(
                 }
             }
 
-            state.restRemaining?.let { rest ->
+            state.restSinceLastSet?.let { rest ->
                 Spacer(Modifier.height(12.dp))
                 Card {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -260,9 +288,11 @@ fun SessionScreen(
                                 color = TideColors.Text,
                             )
                         }
-                        StepButton("-30")
-                        Spacer(Modifier.width(8.dp))
-                        StepButton("+30")
+                        Text(
+                            "SINCE THE LAST SET",
+                            style = LabelStyle,
+                            color = TideColors.TextFaint,
+                        )
                     }
                 }
             }
@@ -271,9 +301,11 @@ fun SessionScreen(
             if (state.confirmingFinish) {
                 ConfirmFinish(state.sessionSetCount, state.workingSetCount, onFinishCancelled, onFinishConfirmed)
             } else {
+                WarmUpToggle(state.warmUp, onToggleWarmUp)
+                Spacer(Modifier.height(10.dp))
                 TideButton(onClick = onLogSet, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        "Log set ${state.setNumber}",
+                        if (state.warmUp) "Log warm-up" else "Log set ${state.setNumber}",
                         style = MaterialTheme.typography.labelLarge,
                         color = TideColors.OnAccent,
                     )
@@ -289,6 +321,42 @@ fun SessionScreen(
             )
             Spacer(Modifier.height(20.dp))
         }
+    }
+}
+
+/**
+ * Marks the next set as a warm-up.
+ *
+ * It sits next to the log button because it is decided in the same breath, and
+ * it resets itself after one set: a toggle left on is how a working set ends up
+ * excluded from progression without anyone noticing.
+ */
+@Composable
+private fun WarmUpToggle(on: Boolean, onToggle: () -> Unit) {
+    val shape = ContinuousCornerShape(14.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                if (on) TideColors.Accent.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.05f),
+            )
+            .border(1.dp, if (on) TideColors.Accent.copy(alpha = 0.55f) else TideColors.Hairline, shape)
+            .clickable(role = Role.Checkbox, onClick = onToggle)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "NEXT SET IS A WARM-UP",
+            style = LabelStyle,
+            color = if (on) TideColors.Accent else TideColors.TextMuted,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            if (on) "ON" else "OFF",
+            style = LabelStyle,
+            color = if (on) TideColors.Accent else TideColors.TextFaint,
+        )
     }
 }
 
@@ -488,11 +556,11 @@ private fun SessionPreview() {
                 reps = "7",
                 lastTime = "80 kg x 7",
                 elapsed = "00:42:18",
-                restRemaining = "1:47",
+                restSinceLastSet = "1:47",
                 logged = listOf(
-                    SessionUiState.LoggedSet("W", "60 kg x 8", null, true),
-                    SessionUiState.LoggedSet("1", "82.5 kg x 8", "RIR 2", false),
-                    SessionUiState.LoggedSet("2", "82.5 kg x 7", "RIR 1", false),
+                    SessionUiState.LoggedSet(index = "W", summary = "60 kg x 8", rir = null, isWarmUp = true),
+                    SessionUiState.LoggedSet(index = "1", summary = "82.5 kg x 8", rir = "RIR 2", isWarmUp = false),
+                    SessionUiState.LoggedSet(index = "2", summary = "82.5 kg x 7", rir = "RIR 1", isWarmUp = false),
                 ),
             ),
         )

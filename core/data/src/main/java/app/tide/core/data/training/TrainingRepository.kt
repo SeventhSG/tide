@@ -62,6 +62,35 @@ class TrainingRepository(
 
     suspend fun activeSession(): SessionEntity? = sessions.activeOrNull()
 
+    /** Every session that started in a window, for the calendar. */
+    suspend fun sessionsBetween(from: Long, to: Long): List<SessionEntity> =
+        sessions.between(from, to)
+
+    /**
+     * What was trained in these sessions, one line per exercise.
+     *
+     * Working sets only, so a day of warm-ups reads as a day of warm-ups. The
+     * top set is the heaviest, or the longest set of reps when nothing was
+     * loaded, because that is what anyone looking back wants to see first.
+     */
+    suspend fun sessionSummaries(sessionIds: List<String>): List<SessionExerciseSummary> {
+        val sets = sessionIds
+            .flatMap { sessions.setsFor(it) }
+            .filter { it.countsTowardProgression }
+        return sets.groupBy { it.exerciseId }
+            .map { (id, rows) ->
+                val top = rows.filter { it.loadKg != null }.maxByOrNull { it.loadKg!! }
+                SessionExerciseSummary(
+                    exerciseId = id,
+                    exerciseName = exercises.byId(id)?.name ?: id,
+                    workingSets = rows.size,
+                    topLoadKg = top?.loadKg,
+                    topReps = top?.reps ?: rows.mapNotNull { it.reps }.maxOrNull(),
+                )
+            }
+            .sortedBy { it.exerciseName }
+    }
+
     /** Total load times reps in a window. Warm-ups and cardio excluded in SQL. */
     suspend fun volumeBetween(from: Long, to: Long): Double = sessions.volumeBetween(from, to)
 
@@ -287,6 +316,15 @@ class TrainingRepository(
     }
 
 }
+
+/** One exercise as it appears looking back at a day. */
+data class SessionExerciseSummary(
+    val exerciseId: String,
+    val exerciseName: String,
+    val workingSets: Int,
+    val topLoadKg: Double?,
+    val topReps: Int?,
+)
 
 /** The decision made for one exercise when a session finished. */
 data class ExerciseProgression(

@@ -49,11 +49,14 @@ android {
 dependencies {
     implementation(project(":core:design"))
     implementation(project(":core:data"))
+    implementation(project(":core:notify"))
+    implementation(project(":core:schedule"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.work.runtime)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -73,4 +76,5 @@ dependencies {
     // TrainingRepositoryTest gives the layer below it.
     testImplementation(libs.room.runtime)
     testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.work.testing)
 }

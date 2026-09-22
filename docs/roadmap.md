@@ -10,9 +10,9 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 204 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
-| Screens rendering | Today, Session logger, Exercise picker |
-| Screens wired to data | Today, Session logger, Exercise picker, Import, Muscle map |
+| Tests | 217 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
+| Screens rendering | Today, Session logger, Exercise picker, History, Notification settings |
+| Screens wired to data | Today, Session logger, Exercise picker, History, Import, Muscle map |
 
 The session logger is real: it opens a session, prescribes from history, logs sets to the
 database and reads them back. Today reads the database too, and shows nothing it cannot
@@ -103,6 +103,28 @@ reads "2 SESSIONS" rather than "2 of 4 done", since nothing has declared what th
 meant to hold. The nav's TRAIN tab opens the picker; BODY, MONEY and ASK are inert until those
 modules exist, rather than moving the highlight onto an empty screen.
 
+**The logger, finished.** Three things it could not do and needed to. **A set can be marked
+as a warm-up**, which is the flag the whole schema rests on and which the app previously could
+not set at all, so every set logged in the app counted toward progression, a 1RM and the muscle
+map. The toggle resets itself after one set, because a toggle left on is how a working set
+disappears from progression unnoticed. **A logged set can be removed**, on a second tap, which
+is the one destructive action on the screen and the only thing on it drawn in red. **Rest is
+counted up from the last set**, not down toward a target, because nothing has said how long
+your rest should be and ninety seconds would be an invented prescription.
+
+**History.** A month of real sessions, a day at a time. Tapping a day shows what was done:
+the exercises, their working sets, the top set of each and the day's volume. A day is filled
+in only when a session finished, since an abandoned session is not training. No streak, no
+flame, no percentage of a target: a blank day is drawn blank and nothing is said about it.
+
+**Notifications, wired.** `:core:notify` decided correctly and nothing called it. Now the
+channels are created at launch, there is a settings screen for the daily summary and quiet
+hours, the runtime permission is asked for at the moment the summary is turned on rather than
+at launch, and a WorkManager job runs once a day to post it. **The summary is off until it is
+asked for**, it is silent, and with nothing outstanding it posts nothing at all: the app does
+not check in. A test notification can be sent from settings, through the same path and ledger
+as a real one, so it can be verified on a phone.
+
 **3. Schedule and notify, the modules.** `:core:schedule` holds recurrence, occurrences and
 the reconciler; `:core:notify` holds tiers, channels, quiet hours, the digest and the ledger.
 Both are tested and neither is wired to a screen yet.
@@ -173,8 +195,9 @@ without asking. Moving a day never reorders the week.
 **Retroactive logging as an action.** The flag exists and the importer sets it, but there is
 no way yet to log a session you did yesterday from inside the app.
 
-**Wiring Phase 3.** No settings screen for quiet hours, no WorkManager job posting the digest,
-and no rule editor. The modules decide correctly and nothing calls them yet.
+**A rule editor.** Quiet hours and the digest have a screen; schedule rules do not. Until the
+planner exists nothing creates a rule, so the daily summary has nothing to summarise and
+correctly says nothing.
 
 ## Then
 

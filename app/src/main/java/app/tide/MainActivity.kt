@@ -1,6 +1,8 @@
 package app.tide
 
+import android.Manifest
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -19,6 +21,9 @@ import app.tide.core.data.Tide
 import app.tide.core.data.importer.TrainingImporter
 import app.tide.core.data.training.TrainingRepository
 import app.tide.core.design.TideTheme
+import app.tide.notify.DigestWorker
+import app.tide.notify.NotifyPreferences
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -28,6 +33,8 @@ private sealed interface Screen {
     data object Import : Screen
     data object Muscles : Screen
     data object Picker : Screen
+    data object Calendar : Screen
+    data object Settings : Screen
     data class Session(val exerciseId: String) : Screen
 }
 
@@ -52,6 +59,11 @@ class MainActivity : ComponentActivity() {
         // The ocean runs to the edges, so the app draws behind the system bars.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // Channels are the only notification control Android gives the user, so
+        // they exist from the first launch whether or not anything is ever
+        // posted. Creating one is free and idempotent.
+        Tide.notifier(applicationContext).ensureChannels()
         setContent {
             TideTheme {
                 var screen by remember { mutableStateOf<Screen>(Screen.Today) }
@@ -61,6 +73,8 @@ class MainActivity : ComponentActivity() {
                         onStartSession = { screen = Screen.Picker },
                         onImport = { screen = Screen.Import },
                         onMuscles = { screen = Screen.Muscles },
+                        onCalendar = { screen = Screen.Calendar },
+                        onSettings = { screen = Screen.Settings },
                     )
                     is Screen.Picker -> WiredExercisePickerScreen(
                         repository = remember { Tide.training(applicationContext) },
@@ -76,6 +90,13 @@ class MainActivity : ComponentActivity() {
                         // Finished is different. There is no session left to
                         // add to, so picking another lift here would start one.
                         onFinished = { screen = Screen.Today },
+                    )
+                    is Screen.Calendar -> WiredCalendarScreen(
+                        repository = remember { Tide.training(applicationContext) },
+                        onBack = { screen = Screen.Today },
+                    )
+                    is Screen.Settings -> WiredSettingsScreen(
+                        onBack = { screen = Screen.Today },
                     )
                     is Screen.Muscles -> WiredMuscleMapScreen(
                         repository = remember { Tide.training(applicationContext) },
@@ -98,6 +119,8 @@ private fun WiredTodayScreen(
     onStartSession: () -> Unit,
     onImport: () -> Unit,
     onMuscles: () -> Unit,
+    onCalendar: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val viewModel = remember { TodayViewModel(repository, scope) }
@@ -113,6 +136,82 @@ private fun WiredTodayScreen(
         onStartSession = onStartSession,
         onImport = onImport,
         onMuscles = onMuscles,
+        onCalendar = onCalendar,
+        onSettings = onSettings,
+    )
+}
+
+@Composable
+private fun WiredCalendarScreen(
+    repository: TrainingRepository,
+    onBack: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val viewModel = remember { CalendarViewModel(repository, scope) }
+    val uiState by viewModel.state.collectAsState()
+
+    CalendarScreen(
+        state = uiState,
+        onBack = onBack,
+        onPreviousMonth = viewModel::onPreviousMonth,
+        onNextMonth = viewModel::onNextMonth,
+        onSelectDay = viewModel::onSelectDay,
+    )
+}
+
+@Composable
+private fun WiredSettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Asked for here rather than at launch, at the moment the person turns the
+    // summary on. An app that asks before it has anything to say is asking for
+    // a habit, not for permission.
+    val permission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+
+    val viewModel = remember {
+        val prefs = NotifyPreferences(context)
+        SettingsViewModel(
+            prefs = prefs,
+            notifier = Tide.notifier(context.applicationContext),
+            scope = scope,
+            onScheduleChanged = { enabled, at ->
+                if (enabled) {
+                    DigestWorker.schedule(context.applicationContext, at)
+                } else {
+                    DigestWorker.cancel(context.applicationContext)
+                }
+            },
+        )
+    }
+    val uiState by viewModel.state.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
+    SettingsScreen(
+        state = uiState,
+        onBack = onBack,
+        onToggleDigest = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            viewModel.onToggleDigest()
+        },
+        onDigestEarlier = viewModel::onDigestEarlier,
+        onDigestLater = viewModel::onDigestLater,
+        onToggleQuietHours = viewModel::onToggleQuietHours,
+        onQuietStartEarlier = viewModel::onQuietStartEarlier,
+        onQuietStartLater = viewModel::onQuietStartLater,
+        onQuietEndEarlier = viewModel::onQuietEndEarlier,
+        onQuietEndLater = viewModel::onQuietEndLater,
+        onRequestPermission = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        },
+        onSendTest = viewModel::onSendTest,
     )
 }
 
@@ -142,6 +241,9 @@ private fun WiredSessionScreen(
         onLoadChange = viewModel::onLoadChange,
         onRepsChange = viewModel::onRepsChange,
         onLogSet = viewModel::onLogSet,
+        onToggleWarmUp = viewModel::onToggleWarmUp,
+        onRowTapped = viewModel::onRowTapped,
+        onRemoveSet = viewModel::onRemoveSet,
         onFinishRequested = viewModel::onFinishRequested,
         onFinishCancelled = viewModel::onFinishCancelled,
         onFinishConfirmed = viewModel::onFinishConfirmed,
