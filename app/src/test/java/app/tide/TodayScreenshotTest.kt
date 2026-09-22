@@ -48,6 +48,35 @@ class TodayScreenshotTest {
     }
 
     @Test
+    fun session() {
+        compose.setContent {
+            TideTheme {
+                Box(Modifier.size(411.dp, 891.dp)) {
+                    SessionScreen(
+                        SessionUiState(
+                            exerciseName = "Barbell row",
+                            setNumber = 3,
+                            targetSets = 4,
+                            ruleLabel = "DOUBLE PROGRESSION 6-9",
+                            loadKg = "82.5",
+                            reps = "7",
+                            lastTime = "80 kg x 7",
+                            elapsed = "00:42:18",
+                            restRemaining = "1:47",
+                            logged = listOf(
+                                SessionUiState.LoggedSet("W", "60 kg x 8", null, true),
+                                SessionUiState.LoggedSet("1", "82.5 kg x 8", "RIR 2", false),
+                                SessionUiState.LoggedSet("2", "82.5 kg x 7", "RIR 1", false),
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+        compose.onRoot().captureRoboImage("build/screenshots/session.png")
+    }
+
+    @Test
     fun todayLargeFont() {
         compose.setContent {
             TideTheme {
