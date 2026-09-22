@@ -44,3 +44,6 @@ keystore.properties
 
 # Local SDK path, machine-specific
 local.properties
+
+# Gradle project-local
+.gradle/

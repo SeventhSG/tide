@@ -24,3 +24,4 @@ rootProject.name = "Tide"
 
 include(":app")
 include(":core:design")
+include(":core:data")
