@@ -13,6 +13,7 @@ import app.tide.core.data.db.SessionEntity
 import app.tide.core.data.db.SetKind
 import app.tide.core.data.db.WorkoutSetEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import java.util.UUID
 import kotlin.math.roundToInt
 
@@ -55,6 +56,18 @@ class TrainingRepository(
     /** When each exercise was last worked, warm-ups excluded, as SQL decides. */
     suspend fun lastTrainedByExercise(): Map<String, Long> =
         sessions.lastTrainedPerExercise().associate { it.exerciseId to it.lastAt }
+
+    /** The most recent sessions, open or finished, newest first. */
+    suspend fun recentSessions(): List<SessionEntity> = sessions.observeRecent().first()
+
+    suspend fun activeSession(): SessionEntity? = sessions.activeOrNull()
+
+    /** Total load times reps in a window. Warm-ups and cardio excluded in SQL. */
+    suspend fun volumeBetween(from: Long, to: Long): Double = sessions.volumeBetween(from, to)
+
+    /** How many sets in a window could move a target. Warm-ups are not among them. */
+    suspend fun workingSetCountBetween(from: Long, to: Long): Int =
+        sessions.workingSetsBetween(from, to).size
 
     // --- sessions ---------------------------------------------------------
 

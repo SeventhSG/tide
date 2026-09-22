@@ -2,7 +2,6 @@ package app.tide
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,34 +11,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.PathBuilder
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.Icon
 import app.tide.core.design.ContinuousCornerShape
 import app.tide.core.design.DataStyle
 import app.tide.core.design.LabelStyle
@@ -59,7 +45,11 @@ import app.tide.core.design.oceanScrimColor
  * Opened twenty-plus times a day, so nothing animates on entry: content is
  * present at the first frame.
  *
- * Every value here is placeholder data. Nothing reads a database yet.
+ * Every number on it comes from [TodayViewModel], which reads the database.
+ * Where there is no source yet, there is no row: sleep and resting heart rate
+ * wait for Body, renewals wait for Money, and the backup age waits for
+ * something that backs up. Inventing them was the first thing this screen did
+ * and the first thing that had to go.
  */
 private val navItems = listOf(
     NavItem("TODAY", TideIcons.Waves),
@@ -71,12 +61,12 @@ private val navItems = listOf(
 
 @Composable
 fun TodayScreen(
+    state: TodayUiState,
     modifier: Modifier = Modifier,
     onStartSession: () -> Unit = {},
     onImport: () -> Unit = {},
     onMuscles: () -> Unit = {},
 ) {
-    var tab by remember { mutableIntStateOf(0) }
     OceanBackground(modifier) {
         Column(Modifier.fillMaxSize()) {
             Column(
@@ -89,69 +79,52 @@ fun TodayScreen(
                 TopBar()
 
                 Spacer(Modifier.height(26.dp))
-                Text("TUE 22 SEPTEMBER", style = LabelStyle, color = TideColors.TextFaint)
+                Text(state.dateLabel, style = LabelStyle, color = TideColors.TextFaint)
 
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "No session\ntoday.",
+                    state.headline,
                     style = MaterialTheme.typography.displayLarge,
                     color = TideColors.Text,
                 )
 
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Last was Pull A, two days ago. Legs is scheduled for tomorrow.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TideColors.TextMuted,
-                )
-
-                Spacer(Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TideButton(onClick = onStartSession) {
-                        Text(
-                            "Start session",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = TideColors.OnAccent,
-                        )
-                    }
-                    TideGhostButton(onClick = {}) {
-                        Text(
-                            "Skip today",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = TideColors.TextMuted,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(22.dp))
-                Scrim {
-                    Text("DRIFT", style = LabelStyle, color = TideColors.TextFaint)
-                    Spacer(Modifier.height(6.dp))
-                    DriftRow("Volume, 7 days", "12 480 kg")
-                    DriftRow("Sleep, average", "6h 41m")
-                    DriftRow("Resting heart rate", "54 bpm")
-                    DriftRow("Renews in 30 days", "4 items", TideColors.Warning)
-                    DriftRow("Last backup", "19 days", TideColors.Critical, divider = false)
-                }
-
-                Spacer(Modifier.height(10.dp))
-                Scrim {
-                    Text("NEEDS YOU", style = LabelStyle, color = TideColors.TextFaint)
-                    Spacer(Modifier.height(8.dp))
-                    // The honest empty state, written before the populated one.
+                state.subline?.let {
+                    Spacer(Modifier.height(10.dp))
                     Text(
-                        "Nothing. The week is clear.",
+                        it,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TideColors.Text,
+                        color = TideColors.TextMuted,
                     )
                 }
 
-                Spacer(Modifier.height(10.dp))
-                WeekStrip()
+                // No "Skip today". Skipping is only meaningful against a plan,
+                // and there is no planner yet, so the button would be a gesture
+                // at a schedule that does not exist.
+                Spacer(Modifier.height(20.dp))
+                TideButton(onClick = onStartSession) {
+                    Text(
+                        if (state.resuming) "Resume session" else "Start session",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TideColors.OnAccent,
+                    )
+                }
 
-                // Quiet, because it matters enormously on day one and never
-                // again. It does not claim the database is empty, because
-                // this screen does not read the database yet.
+                // One row, because one is what the database can answer today.
+                // The section returns when Body and Money give it more.
+                state.volumeLast7Days?.let {
+                    Spacer(Modifier.height(22.dp))
+                    Scrim {
+                        Text("DRIFT", style = LabelStyle, color = TideColors.TextFaint)
+                        Spacer(Modifier.height(6.dp))
+                        DriftRow("Volume, 7 days", it, divider = false)
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                WeekStrip(state)
+
+                // Quiet, because both matter enormously on day one and rarely
+                // after it.
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TideGhostButton(onClick = onMuscles, modifier = Modifier.weight(1f)) {
@@ -173,15 +146,25 @@ fun TodayScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
+            // TRAIN opens the picker. The other three select nothing, because
+            // Body, Money and Ask are not built and a tab that moved the
+            // highlight onto an empty screen would be worse than an inert one.
             LiquidGlassNav(
                 items = navItems,
-                selected = tab,
-                onSelect = { tab = it },
+                selected = 0,
+                onSelect = { if (it == 1) onStartSession() },
             )
         }
     }
 }
 
+/**
+ * No inbox button yet.
+ *
+ * It carried an unread dot and read "Inbox, 2 unread" to a screen reader, from
+ * an inbox that does not exist. The dot is the right pattern for a real unread
+ * count and it comes back with the module that can count one.
+ */
 @Composable
 private fun TopBar() {
     Row(
@@ -190,68 +173,38 @@ private fun TopBar() {
     ) {
         Text("TIDE", style = LabelStyle, color = TideColors.TextMuted)
         Spacer(Modifier.weight(1f))
-        Box(
-            Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .clickable(role = Role.Button, onClick = {}),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box {
-                Icon(
-                    TideIcons.Inbox,
-                    contentDescription = "Inbox, 2 unread",
-                    tint = TideColors.TextMuted,
-                    modifier = Modifier.size(21.dp),
-                )
-                // A real semantic state, which is the only case where a dot earns
-                // its place. It is not decoration.
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(TideColors.Accent),
-                )
-            }
-        }
     }
 }
 
 /**
- * The week, at a glance. Done days, today, and what is planned ahead.
+ * The week, at a glance: the days trained, and which one is today.
  *
- * This is the "one asymmetric tile for whatever is live this week" slot. It
- * earns its place by being the only thing on the screen that shows the shape of
- * the week rather than a single number, and it is why Today is not the same
- * screen on a Monday as on a Friday.
+ * Two states per day, not three. A "planned" day needs a plan, and until the
+ * planner exists an empty square means only that nothing was logged. It is a
+ * fact, and there is no red, no flame and no tally of what was missed.
+ *
+ * The count reads "2 SESSIONS" rather than "2 of 4 done", because nothing has
+ * declared how many days this week was meant to hold.
  */
 @Composable
-private fun WeekStrip() {
-    data class Day(val letter: String, val state: Int)   // 0 none, 1 done, 2 planned
-    val days = listOf(
-        Day("M", 1), Day("T", 1), Day("W", 0), Day("T", 0),
-        Day("F", 2), Day("S", 2), Day("S", 0),
-    )
-    val today = 3
-
+private fun WeekStrip(state: TodayUiState) {
     Scrim {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("THIS WEEK", style = LabelStyle, color = TideColors.TextFaint)
             Spacer(Modifier.weight(1f))
-            Text("2 of 4 done", style = DataStyle, color = TideColors.TextMuted)
+            Text(state.weekSummary, style = DataStyle, color = TideColors.TextMuted)
         }
         Spacer(Modifier.height(14.dp))
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            days.forEachIndexed { i, d ->
+            state.week.forEach { d ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         d.letter,
                         style = LabelStyle,
-                        color = if (i == today) TideColors.Text else TideColors.TextFaint,
+                        color = if (d.isToday) TideColors.Text else TideColors.TextFaint,
                     )
                     Spacer(Modifier.height(8.dp))
                     Box(
@@ -259,15 +212,12 @@ private fun WeekStrip() {
                             .size(30.dp)
                             .clip(ContinuousCornerShape(11.dp))
                             .background(
-                                when (d.state) {
-                                    1 -> TideColors.Accent.copy(alpha = 0.90f)
-                                    2 -> TideColors.Accent.copy(alpha = 0.14f)
-                                    else -> Color.White.copy(alpha = 0.05f)
-                                },
+                                if (d.trained) TideColors.Accent.copy(alpha = 0.90f)
+                                else Color.White.copy(alpha = 0.05f),
                             )
                             .border(
                                 1.dp,
-                                if (i == today) TideColors.Text.copy(alpha = 0.55f)
+                                if (d.isToday) TideColors.Text.copy(alpha = 0.55f)
                                 else Color.Transparent,
                                 ContinuousCornerShape(11.dp),
                             ),
@@ -323,5 +273,24 @@ private fun DriftRow(
 @Preview(widthDp = 411, heightDp = 891)
 @Composable
 private fun TodayPreview() {
-    TideTheme { TodayScreen() }
+    TideTheme {
+        TodayScreen(
+            TodayUiState(
+                dateLabel = "TUE 22 SEPTEMBER",
+                headline = "No session\nyet today.",
+                subline = "Last session was 2 days ago.",
+                volumeLast7Days = "12 480 kg",
+                week = listOf(
+                    TodayUiState.Day("M", trained = true, isToday = false),
+                    TodayUiState.Day("T", trained = false, isToday = true),
+                    TodayUiState.Day("W", trained = false, isToday = false),
+                    TodayUiState.Day("T", trained = false, isToday = false),
+                    TodayUiState.Day("F", trained = false, isToday = false),
+                    TodayUiState.Day("S", trained = false, isToday = false),
+                    TodayUiState.Day("S", trained = false, isToday = false),
+                ),
+                weekSummary = "1 SESSION",
+            ),
+        )
+    }
 }

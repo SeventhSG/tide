@@ -35,12 +35,29 @@ class TodayScreenshotTest {
     @get:Rule
     val compose = createComposeRule()
 
+    private val sample = TodayUiState(
+        dateLabel = "TUE 22 SEPTEMBER",
+        headline = "No session\nyet today.",
+        subline = "Last session was 2 days ago.",
+        volumeLast7Days = "12 480 kg",
+        week = listOf(
+            TodayUiState.Day("M", trained = true, isToday = false),
+            TodayUiState.Day("T", trained = false, isToday = true),
+            TodayUiState.Day("W", trained = false, isToday = false),
+            TodayUiState.Day("T", trained = false, isToday = false),
+            TodayUiState.Day("F", trained = false, isToday = false),
+            TodayUiState.Day("S", trained = false, isToday = false),
+            TodayUiState.Day("S", trained = false, isToday = false),
+        ),
+        weekSummary = "1 SESSION",
+    )
+
     @Test
     fun today() {
         compose.setContent {
             TideTheme {
                 Box(Modifier.size(411.dp, 891.dp)) {
-                    TodayScreen()
+                    TodayScreen(sample)
                 }
             }
         }
@@ -81,7 +98,7 @@ class TodayScreenshotTest {
         compose.setContent {
             TideTheme {
                 Box(Modifier.size(411.dp, 891.dp)) {
-                    TodayScreen()
+                    TodayScreen(sample)
                 }
             }
         }

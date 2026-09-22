@@ -56,7 +56,8 @@ class MainActivity : ComponentActivity() {
             TideTheme {
                 var screen by remember { mutableStateOf<Screen>(Screen.Today) }
                 when (val current = screen) {
-                    is Screen.Today -> TodayScreen(
+                    is Screen.Today -> WiredTodayScreen(
+                        repository = remember { Tide.training(applicationContext) },
                         onStartSession = { screen = Screen.Picker },
                         onImport = { screen = Screen.Import },
                         onMuscles = { screen = Screen.Muscles },
@@ -89,6 +90,30 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+@Composable
+private fun WiredTodayScreen(
+    repository: TrainingRepository,
+    onStartSession: () -> Unit,
+    onImport: () -> Unit,
+    onMuscles: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val viewModel = remember { TodayViewModel(repository, scope) }
+    val uiState by viewModel.state.collectAsState()
+
+    // Coming back from a session, or from a day that turned over while the app
+    // sat in the background, both land here. Neither is a database change, so
+    // the flows do not fire and the screen would keep yesterday's date.
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
+    TodayScreen(
+        state = uiState,
+        onStartSession = onStartSession,
+        onImport = onImport,
+        onMuscles = onMuscles,
+    )
 }
 
 @Composable

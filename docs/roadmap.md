@@ -10,13 +10,13 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 200 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
+| Tests | 204 green, including 30 schedule and reconciler, 28 notify, and 3 on the migrations |
 | Screens rendering | Today, Session logger, Exercise picker |
-| Screens wired to data | Session logger, Exercise picker, Import, Muscle map |
+| Screens wired to data | Today, Session logger, Exercise picker, Import, Muscle map |
 
 The session logger is real: it opens a session, prescribes from history, logs sets to the
-database and reads them back. Today is still hardcoded, and connecting it waits on the
-scheduler in phase 3.
+database and reads them back. Today reads the database too, and shows nothing it cannot
+read.
 
 ## Done
 
@@ -90,6 +90,19 @@ logger returns to the picker and the session stays open, so a second lift is log
 same session. The ocean is off here, as on the logger: this is a screen scrolled in a gym,
 and eyebrow labels over moving water fail the contrast rule.
 
+**Today, honest.** Every number on it now comes from the database, and everything without a
+source is gone rather than invented: sleep and resting heart rate wait for Body, renewals for
+Money, the backup age for something that backs up, and the inbox button for an inbox. What is
+left is real: the date, whether a session is open or was logged today, how long ago the last
+one was, seven day volume when there is any, and the days of this week that were trained.
+
+Two removals worth recording. **"Skip today" is gone**, because skipping is only meaningful
+against a plan and there is no planner. **The week strip has two states, not three**: a
+planned day needs a plan, so an empty square means only that nothing was logged, and the count
+reads "2 SESSIONS" rather than "2 of 4 done", since nothing has declared what the week was
+meant to hold. The nav's TRAIN tab opens the picker; BODY, MONEY and ASK are inert until those
+modules exist, rather than moving the highlight onto an empty screen.
+
 **3. Schedule and notify, the modules.** `:core:schedule` holds recurrence, occurrences and
 the reconciler; `:core:notify` holds tiers, channels, quiet hours, the digest and the ledger.
 Both are tested and neither is wired to a screen yet.
@@ -109,10 +122,7 @@ it says", and four things made that untrue. These come first, before anything ne
 
 1. ~~**Finish a session.**~~ Done, see above.
 2. ~~**An exercise picker.**~~ Done, see above.
-3. **Today shows real numbers or none.** Volume, sleep, heart rate, renewals, backup and the
-   week strip are all hardcoded. Shipping them breaks the rule that a number is real, labelled
-   as sample data, or absent. Volume can come from the database now; the rest has no source
-   until Body and Money exist, so those rows go until then.
+3. ~~**Today shows real numbers or none.**~~ Done, see above.
 4. **Launched once on a real phone.** Nothing has ever started `MainActivity`. Roborazzi
    renders screens, it does not prove the app opens. This step needs a person and a USB cable.
 
