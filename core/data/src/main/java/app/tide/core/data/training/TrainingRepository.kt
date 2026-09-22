@@ -1,0 +1,217 @@
+package app.tide.core.data.training
+
+import app.tide.core.data.db.BodyWeightDao
+import app.tide.core.data.db.ExerciseDao
+import app.tide.core.data.db.ExerciseEntity
+import app.tide.core.data.db.ExerciseStateDao
+import app.tide.core.data.db.ExerciseStateEntity
+import app.tide.core.data.db.RoutineDao
+import app.tide.core.data.db.SessionDao
+import app.tide.core.data.db.SessionEntity
+import app.tide.core.data.db.SetKind
+import app.tide.core.data.db.WorkoutSetEntity
+import kotlinx.coroutines.flow.Flow
+import java.util.UUID
+import kotlin.math.roundToInt
+
+/**
+ * Where the progression engine meets the database.
+ *
+ * The engine is pure and the DAOs are dumb. Everything that decides what happens
+ * to your training lives here, in one place, so there is exactly one path a
+ * logged set can take and one place to look when a number is wrong.
+ */
+class TrainingRepository(
+    private val exercises: ExerciseDao,
+    private val routines: RoutineDao,
+    private val sessions: SessionDao,
+    private val state: ExerciseStateDao,
+    private val bodyWeight: BodyWeightDao,
+    private val now: () -> Long = System::currentTimeMillis,
+    private val newId: () -> String = { UUID.randomUUID().toString() },
+) {
+
+    fun observeExercises(): Flow<List<ExerciseEntity>> = exercises.observeAll()
+    fun observeActiveSession(): Flow<SessionEntity?> = sessions.observeActive()
+    fun observeSets(sessionId: String): Flow<List<WorkoutSetEntity>> = sessions.observeSets(sessionId)
+    fun observeRecentSessions() = sessions.observeRecent()
+
+    suspend fun searchExercises(q: String) =
+        if (q.isBlank()) emptyList() else exercises.search(q)
+
+    // --- sessions ---------------------------------------------------------
+
+    /**
+     * Starts a session, or returns the one already open.
+     *
+     * Only one session can be open at a time. Resuming beats silently starting a
+     * second one and splitting a workout across two rows, which is the kind of
+     * corruption you only notice a month later.
+     */
+    suspend fun startSession(routineId: String? = null, dayIndex: Int? = null): String {
+        sessions.activeOrNull()?.let { return it.id }
+        val id = newId()
+        sessions.upsert(
+            SessionEntity(
+                id = id,
+                routineId = routineId,
+                dayIndex = dayIndex,
+                startedAt = now(),
+            ),
+        )
+        return id
+    }
+
+    /**
+     * Ends the session and runs progression for every exercise it touched.
+     *
+     * This is the moment the app earns its keep, so it happens once, here, and
+     * not scattered across screens.
+     */
+    suspend fun finishSession(sessionId: String, defaultRule: ProgressionRule): List<ProgressionResult> {
+        val session = sessions.byId(sessionId) ?: return emptyList()
+        val sets = sessions.setsFor(sessionId)
+        sessions.upsert(session.copy(endedAt = now()))
+
+        val results = mutableListOf<ProgressionResult>()
+        sets.map { it.exerciseId }.distinct().forEach { exerciseId ->
+            val result = applyProgression(exerciseId, sets, defaultRule)
+            if (result != null) results += result
+        }
+        return results
+    }
+
+    // --- sets -------------------------------------------------------------
+
+    suspend fun logSet(
+        sessionId: String,
+        exerciseId: String,
+        kind: SetKind = SetKind.Standard,
+        loadKg: Double? = null,
+        reps: Int? = null,
+        durationSec: Int? = null,
+        rir: Int? = null,
+        supersetGroup: Int? = null,
+    ): String {
+        val existing = sessions.setsFor(sessionId)
+        val id = newId()
+        sessions.upsertSet(
+            WorkoutSetEntity(
+                id = id,
+                sessionId = sessionId,
+                exerciseId = exerciseId,
+                orderInSession = existing.size,
+                kind = kind,
+                loadKg = loadKg,
+                reps = reps,
+                durationSec = durationSec,
+                rir = rir,
+                supersetGroup = supersetGroup,
+                completedAt = now(),
+            ),
+        )
+        return id
+    }
+
+    suspend fun deleteSet(id: String) = sessions.deleteSet(id)
+
+    // --- progression ------------------------------------------------------
+
+    /**
+     * What to put in front of the user for this exercise right now.
+     *
+     * Falls back, in order, to stored state, then the last session's working
+     * sets, then an empty prescription. It never invents a load: an exercise
+     * with no history shows blank fields rather than a made-up number, because
+     * a guessed starting weight is worse than no suggestion.
+     */
+    suspend fun prescriptionFor(exerciseId: String): Prescription? {
+        state.byExercise(exerciseId)?.let {
+            return Prescription(
+                loadKg = it.nextLoadKg,
+                sets = it.nextSets,
+                reps = it.nextReps,
+                repCeiling = it.nextRepCeiling,
+                durationSec = it.nextDurationSec,
+            )
+        }
+        val last = sessions.lastWorkingSets(exerciseId)
+        if (last.isEmpty()) return null
+        return Prescription(
+            loadKg = last.mapNotNull { it.loadKg }.maxOrNull(),
+            sets = last.size,
+            reps = last.mapNotNull { it.reps }.minOrNull() ?: 0,
+            durationSec = last.mapNotNull { it.durationSec }.minOrNull(),
+        )
+    }
+
+    private suspend fun applyProgression(
+        exerciseId: String,
+        sessionSets: List<WorkoutSetEntity>,
+        defaultRule: ProgressionRule,
+    ): ProgressionResult? {
+        val exercise = exercises.byId(exerciseId) ?: return null
+        val rule = RuleCodec.decode(exercise.progressionRule) ?: defaultRule
+
+        // Warm-ups and cardio never count. This is the single most important
+        // filter in the module.
+        val working = sessionSets.filter {
+            it.exerciseId == exerciseId && it.countsTowardProgression
+        }
+        if (working.isEmpty()) return null
+
+        val current = prescriptionFor(exerciseId) ?: Prescription(
+            loadKg = working.mapNotNull { it.loadKg }.maxOrNull(),
+            sets = working.size,
+            reps = working.mapNotNull { it.reps }.minOrNull() ?: 0,
+        )
+        val outcome = SessionOutcome(
+            working.map { PerformedSet(it.reps ?: 0, it.loadKg, it.durationSec) },
+        )
+        val prior = state.byExercise(exerciseId)?.stalls ?: 0
+        val result = ProgressionEngine.next(rule, current, outcome, prior)
+
+        val best = working.mapNotNull { s ->
+            val l = s.loadKg; val r = s.reps
+            if (l != null && r != null && r > 0) OneRepMax.epley(l, r) else null
+        }.maxOrNull()
+
+        state.upsert(
+            ExerciseStateEntity(
+                exerciseId = exerciseId,
+                nextLoadKg = result.next.loadKg,
+                nextReps = result.next.reps,
+                nextSets = result.next.sets,
+                nextRepCeiling = result.next.repCeiling,
+                nextDurationSec = result.next.durationSec,
+                stalls = result.stalls,
+                lastSessionAt = now(),
+                bestEstimated1rmKg = maxOf(
+                    best ?: 0.0,
+                    state.byExercise(exerciseId)?.bestEstimated1rmKg ?: 0.0,
+                ).takeIf { it > 0.0 },
+            ),
+        )
+        return result
+    }
+
+}
+
+/**
+ * Estimated one-rep max.
+ *
+ * Epley, because it is the one most lifters recognise and it is close enough in
+ * the 1 to 10 rep range where almost all logged sets live. It is an estimate and
+ * the app says so wherever it shows one: no app should print 137.4 kg and imply
+ * it measured something.
+ */
+object OneRepMax {
+    fun epley(loadKg: Double, reps: Int): Double {
+        if (reps <= 0) return 0.0
+        if (reps == 1) return loadKg
+        return loadKg * (1.0 + reps / 30.0)
+    }
+
+    /** Display value. Whole kilos, because the precision is not real. */
+    fun display(loadKg: Double, reps: Int): Int = epley(loadKg, reps).roundToInt()
+}

@@ -24,6 +24,10 @@ android {
         jvmTarget = "17"
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     sourceSets {
         getByName("test").assets.srcDir("$projectDir/schemas")
     }
@@ -38,4 +42,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.room.testing)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

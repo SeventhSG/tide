@@ -62,6 +62,12 @@ interface SessionDao {
     @Query("SELECT * FROM session WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
     fun observeActive(): Flow<SessionEntity?>
 
+    @Query("SELECT * FROM session WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
+    suspend fun activeOrNull(): SessionEntity?
+
+    @Query("SELECT * FROM session WHERE id = :id")
+    suspend fun byId(id: String): SessionEntity?
+
     @Query("SELECT * FROM session WHERE startedAt BETWEEN :from AND :to ORDER BY startedAt")
     suspend fun between(from: Long, to: Long): List<SessionEntity>
 
@@ -69,6 +75,9 @@ interface SessionDao {
 
     @Query("SELECT * FROM workout_set WHERE sessionId = :sessionId ORDER BY orderInSession")
     fun observeSets(sessionId: String): Flow<List<WorkoutSetEntity>>
+
+    @Query("SELECT * FROM workout_set WHERE sessionId = :sessionId ORDER BY orderInSession")
+    suspend fun setsFor(sessionId: String): List<WorkoutSetEntity>
 
     @Upsert suspend fun upsertSet(s: WorkoutSetEntity)
 
