@@ -1,15 +1,12 @@
 package app.tide.core.design
 
-import android.graphics.RenderEffect
-import android.graphics.RuntimeShader
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -19,35 +16,51 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import kotlin.math.sin
+import kotlin.random.Random
 
 /**
  * The app's ground is deep water, not a flat colour.
  *
  * Three rules govern it, and they are what keep it from being decoration:
  *
- *  1. It is never behind a number. Anything carrying text or data sits on a
- *     scrim ([OceanScrim]), so contrast is measured against the scrim and not
- *     against the water.
+ *  1. It is never behind a number. Anything carrying text sits on a scrim, so
+ *     contrast is measured against the scrim and not against the water.
  *  2. It is environment, not feedback. It never tells you something changed.
- *  3. It turns off: under reduced motion, under battery saver, on low-RAM
- *     devices, and entirely on the active session logger.
+ *  3. It turns off: under reduced motion it stops moving, and the session logger
+ *     switches it off entirely.
  *
- * On API 33 and up the water is one AGSL shader, so the whole thing is a single
- * GPU draw. Below that it degrades to the depth gradient alone, which is most of
- * the effect for none of the cost.
+ * Drawn with Compose rather than an AGSL shader. The shader version was prettier
+ * and wrong: it needed API 33, so most of the effect vanished on older devices,
+ * and it could not be screenshot-tested at all because the JVM renderer does not
+ * execute AGSL. This runs everywhere down to minSdk and renders in tests, which
+ * is worth more than the extra fidelity.
  */
 
-/** Depth gradient. Always drawn, on every API level, animated or not. */
-private val OceanGradient = Brush.verticalGradient(
-    0.00f to Color(0xFF17555E),
-    0.16f to Color(0xFF0B323B),
-    0.42f to Color(0xFF061C23),
+private val DepthGradient = Brush.verticalGradient(
+    0.00f to Color(0xFF1B5F68),
+    0.10f to Color(0xFF12454F),
+    0.30f to Color(0xFF0A2A33),
+    0.58f to Color(0xFF05171D),
     1.00f to Color(0xFF03090D),
 )
+
+enum class OceanIntensity {
+    /** Shafts, bubbles, drift. */
+    Full,
+
+    /** Depth gradient and vignette only. Battery saver, low RAM. */
+    Subtle,
+
+    /** Flat surface colour. The session logger uses this. */
+    Off,
+}
 
 @Composable
 fun OceanBackground(
@@ -56,113 +69,167 @@ fun OceanBackground(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val reduceMotion = rememberReducedMotion()
-    val animate = intensity == OceanIntensity.Full && !reduceMotion &&
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
-    Box(modifier.fillMaxSize().background(OceanGradient)) {
-        if (intensity != OceanIntensity.Off && animate) {
-            @Suppress("NewApi")
-            AnimatedWater(Modifier.fillMaxSize())
+    if (intensity == OceanIntensity.Off) {
+        Box(modifier.fillMaxSize().background(TideColors.Surface), content = content)
+        return
+    }
+
+    // One slow clock drives everything. 60s is long enough that the loop is not
+    // perceptible, and a single animation is cheaper than one per element.
+    val transition = rememberInfiniteTransition(label = "ocean")
+    val t by if (reduceMotion) {
+        remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    } else {
+        transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(60_000, easing = LinearEasing), RepeatMode.Restart),
+            label = "oceanTime",
+        )
+    }
+
+    val bubbles = remember { generateBubbles() }
+
+    Box(modifier.fillMaxSize().background(DepthGradient)) {
+        Canvas(Modifier.fillMaxSize()) {
+            drawShafts(t)
+            if (intensity == OceanIntensity.Full) {
+                drawMotes(t)
+                drawBubbles(bubbles, t)
+            }
+            drawVignette()
         }
         content()
     }
 }
 
-enum class OceanIntensity {
-    /** Shader, caustics, drifting particulate. */
-    Full,
+/**
+ * Light shafts. Slanted parallelograms with a vertical gradient, sliding
+ * sideways on a slow sine so they breathe rather than march.
+ */
+private fun DrawScope.drawShafts(t: Float) {
+    data class Shaft(val x: Float, val w: Float, val alpha: Float, val phase: Float)
 
-    /** Depth gradient only. Default on low-RAM devices and under battery saver. */
-    Subtle,
+    val shafts = listOf(
+        Shaft(0.06f, 0.11f, 0.20f, 0.0f),
+        Shaft(0.27f, 0.05f, 0.14f, 0.6f),
+        Shaft(0.46f, 0.16f, 0.26f, 0.25f),
+        Shaft(0.70f, 0.07f, 0.16f, 0.85f),
+        Shaft(0.88f, 0.04f, 0.11f, 0.45f),
+    )
 
-    /** Flat surface colour. The session logger uses this. */
-    Off,
+    // Light stops around 46 percent of the way down, as it does in water.
+    val depth = size.height * 0.46f
+    val slant = size.width * 0.16f
+
+    // Each shaft is drawn as overlapping sub-bands whose alpha follows a bell
+    // curve across the width. A single parallelogram gives hard diagonal edges,
+    // which is the tell that immediately reads as a shape rather than as light.
+    val bands = 11
+
+    shafts.forEach { s ->
+        val sway = sin((t + s.phase) * 2f * Math.PI.toFloat()) * size.width * 0.035f
+        val left = s.x * size.width + sway
+        val w = s.w * size.width
+        val bandW = w / bands
+
+        for (i in 0 until bands) {
+            val centred = (i + 0.5f) / bands * 2f - 1f          // -1 at edges, 0 mid
+            val falloff = kotlin.math.exp(-(centred * centred) * 2.6f)
+            val a = s.alpha * falloff
+            if (a < 0.004f) continue
+
+            val bx = left + i * bandW
+            val path = Path().apply {
+                moveTo(bx, 0f)
+                lineTo(bx + bandW + 0.75f, 0f)                   // hairline overlap
+                lineTo(bx + bandW + 0.75f + slant, depth)
+                lineTo(bx + slant, depth)
+                close()
+            }
+            drawPath(
+                path,
+                Brush.verticalGradient(
+                    0.00f to Color(0xFF8AFFE8).copy(alpha = a),
+                    0.55f to Color(0xFF8AFFE8).copy(alpha = a * 0.32f),
+                    1.00f to Color.Transparent,
+                    endY = depth,
+                ),
+            )
+        }
+    }
 }
 
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
-@Composable
-private fun AnimatedWater(modifier: Modifier) {
-    val shader = remember { RuntimeShader(OCEAN_AGSL) }
-    val transition = rememberInfiniteTransition(label = "ocean")
+private class Bubble(val x: Float, val seed: Float, val r: Float, val speed: Float)
 
-    // One slow clock drives caustics, shafts and drift together. A 48 second
-    // cycle is long enough that the loop is not perceptible.
-    val time by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 48f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(48_000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
+private fun generateBubbles(): List<Bubble> {
+    val rng = Random(7)
+    return List(18) {
+        Bubble(
+            x = rng.nextFloat(),
+            seed = rng.nextFloat(),
+            r = 1.2f + rng.nextFloat() * 4.4f,
+            speed = 0.35f + rng.nextFloat() * 0.85f,
+        )
+    }
+}
+
+private fun DrawScope.drawBubbles(bubbles: List<Bubble>, t: Float) {
+    bubbles.forEach { b ->
+        // Each bubble runs its own loop, offset by its seed, so they never
+        // rise in step with one another.
+        val p = ((t * b.speed) + b.seed) % 1f
+        val y = size.height * (1.05f - p * 1.15f)
+        val drift = sin((p + b.seed) * 4f * Math.PI.toFloat()) * size.width * 0.012f
+        val x = b.x * size.width + drift
+
+        // Fade in off the bottom and out before the surface, so none of them pop.
+        val alpha = (minOf(p / 0.12f, 1f) * (1f - maxOf(0f, (p - 0.80f) / 0.20f))) * 0.42f
+        if (alpha <= 0.01f) return@forEach
+
+        drawCircle(
+            color = Color(0xFFBAFAF0).copy(alpha = alpha),
+            radius = b.r,
+            center = Offset(x, y),
+            style = Stroke(width = b.r * 0.34f),
+        )
+        drawCircle(
+            color = Color(0xFFD8FFF8).copy(alpha = alpha * 0.8f),
+            radius = b.r * 0.28f,
+            center = Offset(x - b.r * 0.3f, y - b.r * 0.35f),
+        )
+    }
+}
+
+/** Suspended particulate. Denser with depth, drifting up very slowly. */
+private fun DrawScope.drawMotes(t: Float) {
+    val rng = Random(21)
+    repeat(70) {
+        val mx = rng.nextFloat() * size.width
+        val base = rng.nextFloat()
+        val my = ((base - t * 0.10f) % 1f + 1f) % 1f
+        val y = my * size.height
+        val depthFade = 0.10f + (y / size.height) * 0.22f
+        drawCircle(
+            color = Color(0xFFBAFAF0).copy(alpha = depthFade),
+            radius = 0.9f,
+            center = Offset(mx, y),
+        )
+    }
+}
+
+/** Pulls the corners down so the content sits in a pool of light. */
+private fun DrawScope.drawVignette() {
+    drawRect(
+        Brush.radialGradient(
+            0.42f to Color.Transparent,
+            1.00f to Color(0xFF02060A).copy(alpha = 0.66f),
+            center = Offset(size.width * 0.5f, size.height * 0.30f),
+            radius = size.height * 0.78f,
         ),
-        label = "oceanTime",
-    )
-
-    Box(
-        modifier.graphicsLayer {
-            shader.setFloatUniform("uTime", time)
-            shader.setFloatUniform("uSize", size.width, size.height)
-            renderEffect = RenderEffect
-                .createRuntimeShaderEffect(shader, "uContent")
-                .asComposeRenderEffect()
-        },
     )
 }
 
-/**
- * Caustics are two interfering value-noise fields, which is cheap and reads as
- * moving water. Shafts are gaussian bands slanted with depth. Both fade out
- * before mid screen, because light does.
- */
-private const val OCEAN_AGSL = """
-uniform float2 uSize;
-uniform float uTime;
-uniform shader uContent;
-
-float hash(float2 p) {
-    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
-}
-
-float noise(float2 p) {
-    float2 i = floor(p);
-    float2 f = fract(p);
-    float2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + float2(1.0, 0.0)), u.x),
-               mix(hash(i + float2(0.0, 1.0)), hash(i + float2(1.0, 1.0)), u.x), u.y);
-}
-
-half4 main(float2 coord) {
-    float2 uv = coord / uSize;
-    float depth = uv.y;
-
-    // light falls off fast underwater
-    float lit = pow(max(0.0, 1.0 - depth * 2.1), 1.7);
-
-    // caustics: two drifting noise fields, sharpened into a web
-    float2 a = uv * float2(7.0, 15.0) + float2(uTime * 0.035, uTime * -0.06);
-    float2 b = uv * float2(11.0, 9.0) + float2(uTime * -0.028, uTime * 0.045);
-    float web = noise(a) * noise(b);
-    web = pow(web, 5.0) * 7.0;
-
-    // shafts: gaussian bands, slanted further with depth
-    float shafts = 0.0;
-    shafts += exp(-pow((uv.x + depth * 0.30 - 0.14) / 0.055, 2.0)) * 0.55;
-    shafts += exp(-pow((uv.x + depth * 0.30 - 0.46) / 0.085, 2.0)) * 0.80;
-    shafts += exp(-pow((uv.x + depth * 0.30 - 0.78) / 0.040, 2.0)) * 0.45;
-
-    // suspended particulate, drifting up, denser with depth
-    float2 pc = uv * float2(60.0, 120.0) + float2(0.0, -uTime * 0.25);
-    float motes = step(0.996, hash(floor(pc))) * (0.25 + depth * 0.45);
-
-    float3 water = float3(0.36, 1.0, 0.91);
-    float3 glow = water * (web * lit * 0.55 + shafts * lit * 0.22 + motes * 0.5);
-
-    return half4(half3(glow), 1.0);
-}
-"""
-
-/**
- * The surface every readable thing sits on. Blur plus a translucent fill, so the
- * water is visible behind it without ever being behind a glyph.
- */
-@Composable
-fun oceanScrimColor(): Color = Color(0xA80D1D25)
+/** The surface every readable thing sits on. */
+fun oceanScrimColor(): Color = Color(0xCC0B1D25)

@@ -17,6 +17,7 @@ tracked_text() {
   git ls-files -z | while IFS= read -r -d '' f; do
     case "$f" in
       *.png|*.jpg|*.webp|*.ttf|*.otf|*.jar|*.keystore|*.jks|LICENSE) continue ;;
+      tools/gate.sh) continue ;;   # it names what it bans, so it cannot scan itself
     esac
     [ -f "$f" ] || continue
     grep -Iq . "$f" 2>/dev/null && printf '%s\0' "$f"
@@ -24,8 +25,9 @@ tracked_text() {
 }
 
 # --- 1. no en dash or em dash anywhere a person can read -------------------
-# The pattern is built from codepoints rather than pasted, so this script does
-# not match itself.
+# This file necessarily contains the characters it bans, so it excludes itself
+# from the scan above rather than pretending otherwise. The planted-dash check
+# below is what proves the pattern still works.
 dash=$'[–—]'
 planted=$(mktemp); printf 'planted — dash\n' > "$planted"
 if [ "$(grep -c "$dash" "$planted")" != "1" ]; then
