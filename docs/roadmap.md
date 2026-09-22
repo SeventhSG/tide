@@ -10,9 +10,9 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 64 green: 15 pure progression, 7 repository round-trip, 34 importer and CSV, 3 viewmodel, 5 screenshot |
+| Tests | 78 green: 15 pure progression, 7 repository round-trip, 36 importer and CSV, 9 viewmodel, 11 screenshot |
 | Screens rendering | Today, Session logger |
-| Screens wired to data | Session logger |
+| Screens wired to data | Session logger, Import |
 
 The session logger is real: it opens a session, prescribes from history, logs sets to the
 database and reads them back. Today is still hardcoded, and connecting it waits on the
@@ -57,15 +57,20 @@ Progression is deliberately not replayed over imported sessions. Imported sessio
 produces a real target. Replaying the engine would manufacture stall counts from sessions
 whose warm-ups were never marked, and fire deloads from them.
 
-## Next
+**2f. The import screen.** The Storage Access Framework picker, and a screen that reads the
+file, says what is in it, and writes nothing until the button is pressed. A preview is not
+decoration here: committing a year of training sight unseen is not a decision anyone can
+make well, and the part worth seeing is what could **not** be matched, since those lifts come
+in under their own names and start their own history.
 
-**2f, the rest.** The file picker and the import screen: choosing an export through the
-Storage Access Framework, showing what matched and what did not before committing, and
-retroactive logging as a user-facing action rather than only an importer flag.
+## Next
 
 **2g. Muscle map.** Balance (volume per muscle over a window), fatigue (weighted by proximity
 to estimated 1RM, decaying smoothly rather than dropping out of a hard window), strength
 (days since last trained plus estimated 1RM).
+
+**Retroactive logging as an action.** The flag exists and the importer sets it, but there is
+no way yet to log a session you did yesterday from inside the app.
 
 ## Then
 

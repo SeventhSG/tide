@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -161,6 +162,32 @@ class TrainingImporterTest {
         assertEquals(1, results.size)
         assertEquals("hitting the imported target advances it", 62.5, results[0].next.loadKg!!, 0.001)
         assertEquals(false, results[0].deloaded)
+    }
+
+    @Test
+    fun `a preview reports what would happen and writes nothing`() = runTest {
+        val preview = importer.preview(strong)!!
+
+        assertEquals(ImportFormat.Strong, preview.format)
+        assertEquals(2, preview.sessions)
+        assertEquals(5, preview.sets)
+        assertEquals(listOf("Bench Press (Barbell)", "Barbell Row").sorted(), preview.matched)
+        assertEquals("the lift with no library entry is named before committing",
+            listOf("Zercher Carry"), preview.unmatched)
+
+        // The point of a preview is that nothing happened yet.
+        assertTrue("no session may be written", db.sessions().between(0, Long.MAX_VALUE).isEmpty())
+        assertNull("no custom exercise may be created", db.exercises().byName("Zercher Carry"))
+    }
+
+    @Test
+    fun `a preview of an already imported file shows nothing left unmatched`() = runTest {
+        importer.import(strong)
+        val preview = importer.preview(strong)!!
+        assertTrue(
+            "the custom exercise made last time counts as matched now",
+            preview.unmatched.isEmpty(),
+        )
     }
 
     @Test

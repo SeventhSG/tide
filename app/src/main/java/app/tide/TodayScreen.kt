@@ -70,7 +70,11 @@ private val navItems = listOf(
 )
 
 @Composable
-fun TodayScreen(modifier: Modifier = Modifier, onStartSession: () -> Unit = {}) {
+fun TodayScreen(
+    modifier: Modifier = Modifier,
+    onStartSession: () -> Unit = {},
+    onImport: () -> Unit = {},
+) {
     var tab by remember { mutableIntStateOf(0) }
     OceanBackground(modifier) {
         Column(Modifier.fillMaxSize()) {
@@ -143,6 +147,18 @@ fun TodayScreen(modifier: Modifier = Modifier, onStartSession: () -> Unit = {}) 
 
                 Spacer(Modifier.height(10.dp))
                 WeekStrip()
+
+                // Quiet, because it matters enormously on day one and never
+                // again. It does not claim the database is empty, because
+                // this screen does not read the database yet.
+                Spacer(Modifier.height(12.dp))
+                TideGhostButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Import from another app",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TideColors.TextMuted,
+                    )
+                }
 
                 Spacer(Modifier.height(16.dp))
             }

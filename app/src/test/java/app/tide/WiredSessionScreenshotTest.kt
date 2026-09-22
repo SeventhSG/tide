@@ -18,7 +18,8 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -79,8 +80,11 @@ class WiredSessionScreenshotTest {
     }
 
     @After
-    fun tearDown() {
-        scope.cancel()
+    fun tearDown() = runBlocking {
+        // Cancel and wait, in that order, before closing. A coroutine still
+        // inside a Room call when the database shuts under it throws, and the
+        // exception surfaces in whichever test happens to run next.
+        scope.coroutineContext.job.cancelAndJoin()
         db.close()
     }
 

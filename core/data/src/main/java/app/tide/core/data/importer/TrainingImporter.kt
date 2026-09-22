@@ -36,6 +36,43 @@ class TrainingImporter(
     private val newId: () -> String = { UUID.randomUUID().toString() },
 ) {
 
+    /**
+     * What an import would do, without doing any of it.
+     *
+     * Nothing is written and no custom exercise is created. Committing a year
+     * of training sight unseen is not a decision anyone can make well, so the
+     * screen shows this first and the person presses the button knowing what
+     * matched, what did not, and what will not come in at all.
+     */
+    suspend fun preview(text: String): ImportPreview? {
+        val parsed = ImportParser.parse(text, zone) ?: return null
+        val matcher = ExerciseMatcher(exercises.all())
+
+        val matched = mutableListOf<String>()
+        val unmatched = mutableListOf<String>()
+        for (name in parsed.sets.map { it.exerciseName }.distinct().sorted()) {
+            // An existing custom exercise counts as matched: a second import
+            // of the same export reuses it rather than making another.
+            if (matcher.match(name) != null || exercises.byName(name) != null) {
+                matched += name
+            } else {
+                unmatched += name
+            }
+        }
+
+        val days = parsed.sets.map { sessionKey(it) }.distinct().size
+        return ImportPreview(
+            format = parsed.format,
+            sessions = days,
+            sets = parsed.sets.size,
+            matched = matched,
+            unmatched = unmatched,
+            rowsSkipped = parsed.skipped,
+            earliest = parsed.sets.minOfOrNull { it.performedAt },
+            latest = parsed.sets.maxOfOrNull { it.performedAt },
+        )
+    }
+
     suspend fun import(text: String): ImportSummary? {
         val parsed = ImportParser.parse(text, zone) ?: return null
         val matcher = ExerciseMatcher(exercises.all())
@@ -79,13 +116,7 @@ class TrainingImporter(
         var setsImported = 0
         var duplicates = 0
 
-        // A session is a day, or a named workout within a day where the export
-        // names one. Strong logs two sessions on a Saturday as two workouts.
-        val grouped = parsed.sets.groupBy { set ->
-            val day = java.time.Instant.ofEpochMilli(set.performedAt)
-                .atZone(zone).toLocalDate()
-            day to set.workoutName.orEmpty()
-        }
+        val grouped = parsed.sets.groupBy { sessionKey(it) }
 
         for ((_, setsInSession) in grouped.entries.sortedBy { it.value.first().performedAt }) {
             val startedAt = setsInSession.minOf { it.performedAt }
@@ -141,6 +172,15 @@ class TrainingImporter(
         )
     }
 
+    /**
+     * A session is a day, or a named workout within a day where the export
+     * names one. Strong logs two sessions on a Saturday as two workouts, and
+     * FitNotes names nothing, so a day there is one session.
+     */
+    private fun sessionKey(set: ImportedSet): Pair<java.time.LocalDate, String> =
+        java.time.Instant.ofEpochMilli(set.performedAt).atZone(zone).toLocalDate() to
+            set.workoutName.orEmpty()
+
     private fun kindOf(set: ImportedSet): SetKind = when {
         set.isWarmUp -> SetKind.WarmUp
         set.distanceM != null -> SetKind.Cardio
@@ -170,4 +210,22 @@ data class ImportSummary(
     val exercisesCreated: List<String>,
     val duplicateSessionsSkipped: Int,
     val rowsSkipped: List<String>,
+)
+
+/**
+ * What an import would bring in, shown before anything is written.
+ *
+ * [unmatched] is the number that matters most to a person deciding whether to
+ * go ahead: those lifts will come in, but as new custom exercises rather than
+ * joining the history of a library lift.
+ */
+data class ImportPreview(
+    val format: ImportFormat,
+    val sessions: Int,
+    val sets: Int,
+    val matched: List<String>,
+    val unmatched: List<String>,
+    val rowsSkipped: List<String>,
+    val earliest: Long?,
+    val latest: Long?,
 )
