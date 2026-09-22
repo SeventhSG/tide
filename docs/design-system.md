@@ -63,15 +63,67 @@ Two families, one rule each.
 That second rule is most of the instrument-panel feel. A number rendered in the body font is
 a bug.
 
-## Shape
+## Shape: continuous corners
 
-One system, applied everywhere:
+![Continuous corners](images/continuous-corners.png)
 
-- Containers and sheets: 12dp
-- Inputs: 8dp
-- Chips and buttons: full pill
+Corners are **superellipse, not circular arcs**. A circular corner meets the straight edge
+with a sudden jump in curvature, and the eye reads that discontinuity as slightly cheap even
+when it cannot name it. A continuous corner ramps the curvature in, which is most of why iOS
+surfaces feel more considered than Android ones.
 
-No exceptions without amending this section first.
+Compose's `RoundedCornerShape` is circular. `:core:design` provides
+`ContinuousCornerShape(radius, n = 5f)`, a custom `Shape` building the superellipse path
+`|x/r|^n + |y/r|^n = 1`. Applied once through `MaterialTheme.shapes` so every Material
+component inherits it.
+
+| Element | Radius | n |
+|---|---|---|
+| Panels and sheets | 20dp | 5 |
+| Inputs | 12dp | 5 |
+| Chips and buttons | full pill | pill is unaffected |
+| Bottom sheets | 28dp top corners | 5 |
+
+Continuous corners need a larger radius than circular ones to read as intentional, which is
+why panels moved from 12dp to 20dp. Two caveats worth knowing: a custom `Shape` builds a
+`Path` rather than a fast rounded-rect, so it is marginally more expensive (irrelevant at
+these counts, measure if a list ever stutters), and a handful of Material components hardcode
+their shape and will need wrapping.
+
+## The ocean
+
+![Today over the ocean](images/today-ocean-mock.png)
+
+The ground is not a flat colour. It is deep water: a depth gradient, light shafts near the
+surface, caustics, suspended particulate and slow bubbles, going black as you descend. The
+left panel above is content sitting directly on it. The right is the shipped arrangement.
+
+**The rule that makes it work: the ocean is never behind a number.** Every surface carrying
+text or data sits on a scrim, `surfaceRaised` at about 84 percent over a blurred backdrop,
+with continuous corners. You see the water in the gaps, behind the top bar, in empty states
+and down the margins, and never through a reading. Contrast ratios in the colour section are
+measured against the scrim, not against the water, and that is the number that must hold.
+
+**Scroll is descent.** Scrolling down darkens the ground and drifts the particulate upward.
+This is the one piece of background motion that survives the frequency gate, because it
+communicates position in a long list rather than decorating.
+
+**Honest conflict, and how it resolves.** The motion section says no perpetual ambient
+animation on a surface opened twenty times a day, and an animated ocean is exactly that. The
+resolution is that the ocean is environment rather than feedback, so it is held to a
+different standard: it moves slowly enough to be ignorable, it stills wherever content is
+dense, and it is never the thing that tells you something changed. Where that is not enough,
+it turns off:
+
+- Off under `prefers-reduced-motion`, battery saver and power save.
+- Off entirely on the active session logger. Mid-workout you do not need bubbles.
+- A setting with three values: Full, Subtle (gradient only, no animation), Off (flat
+  `surface`). Subtle is the default on devices reporting low RAM.
+
+**Implementation.** An AGSL `RuntimeShader` on API 33+, which keeps the whole thing on the
+GPU as one draw. Below 33, a pre-rendered gradient plus a static caustic texture, no
+animation. `tools/render_mock.py` holds the reference implementation of the look in Python
+and regenerates the image above; the shader has to match it, and that image is the target.
 
 ## Materiality
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The splash theme only has to hold the first frame before Compose takes
+      over. Everything visual after that comes from TideTheme in Kotlin.
+    -->
+    <style name="Theme.Tide" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#060F14</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
