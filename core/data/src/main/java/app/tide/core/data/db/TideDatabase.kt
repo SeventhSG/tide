@@ -112,6 +112,57 @@ interface SessionDao {
     )
     suspend fun lastWorkingSets(exerciseId: String): List<WorkoutSetEntity>
 
+    /**
+     * Working sets in a window, carrying the muscles they trained.
+     *
+     * Joined in SQL rather than fetched and zipped in Kotlin, and filtered
+     * here too, so no caller can forget the warm-up exclusion and quietly
+     * inflate every muscle on the map.
+     */
+    @Query(
+        """
+        SELECT ws.exerciseId AS exerciseId, ws.loadKg AS loadKg, ws.reps AS reps,
+               ws.durationSec AS durationSec, ws.completedAt AS completedAt,
+               e.primaryMuscle AS primaryMuscle, e.secondaryMuscles AS secondaryMuscles
+        FROM workout_set ws
+        JOIN exercise e ON e.id = ws.exerciseId
+        WHERE ws.completedAt BETWEEN :from AND :to
+          AND ws.kind NOT IN ('WarmUp', 'Cardio')
+        ORDER BY ws.completedAt
+        """,
+    )
+    suspend fun workingSetsBetween(from: Long, to: Long): List<SetWithMuscles>
+
+    /**
+     * The best estimated 1RM ever seen per exercise, computed from the sets.
+     *
+     * Epley inline, because `exercise_state` is only written when a session is
+     * finished through the app, and an imported history never passes through
+     * that path. Reading it from the sets themselves is the only version that
+     * is right for both.
+     */
+    @Query(
+        """
+        SELECT exerciseId, MAX(loadKg * (1.0 + reps / 30.0)) AS estimated1rmKg
+        FROM workout_set
+        WHERE kind NOT IN ('WarmUp', 'Cardio')
+          AND loadKg IS NOT NULL AND loadKg > 0 AND reps IS NOT NULL AND reps > 0
+        GROUP BY exerciseId
+        """,
+    )
+    suspend fun bestEstimated1rms(): List<Estimated1rm>
+
+    /** The most recent working set per exercise, for "days since trained". */
+    @Query(
+        """
+        SELECT exerciseId, MAX(completedAt) AS lastAt
+        FROM workout_set
+        WHERE kind NOT IN ('WarmUp', 'Cardio')
+        GROUP BY exerciseId
+        """,
+    )
+    suspend fun lastTrainedPerExercise(): List<LastTrained>
+
     /** Total volume in a window. Warm-ups excluded, cardio has no load. */
     @Query(
         """

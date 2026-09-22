@@ -169,6 +169,26 @@ data class WorkoutSetEntity(
         get() = kind != SetKind.WarmUp && kind != SetKind.Cardio
 }
 
+/**
+ * A working set with the muscles it trained, as the muscle map reads them.
+ *
+ * Not a table. This is the shape of a join, kept here so the query and the
+ * thing it returns sit next to each other.
+ */
+data class SetWithMuscles(
+    val exerciseId: String,
+    val loadKg: Double?,
+    val reps: Int?,
+    val durationSec: Int?,
+    val completedAt: Long,
+    val primaryMuscle: Muscle,
+    val secondaryMuscles: String,
+)
+
+data class Estimated1rm(val exerciseId: String, val estimated1rmKg: Double)
+
+data class LastTrained(val exerciseId: String, val lastAt: Long)
+
 @Entity(tableName = "body_weight", indices = [Index("at", unique = true)])
 data class BodyWeightEntity(
     @PrimaryKey val id: String,

@@ -142,6 +142,34 @@ class TrainingRepositoryTest {
     }
 
     @Test
+    fun `the muscle map excludes warm-ups in SQL, like everything else`() = runTest {
+        val s = repo.startSession()
+        repo.logSet(s, squat.id, SetKind.WarmUp, loadKg = 100.0, reps = 10)  // 1000
+        repo.logSet(s, squat.id, loadKg = 100.0, reps = 5)                   // 500
+        repo.finishSession(s, rule)
+
+        val quads = repo.muscleMap().single { it.muscle == Muscle.Quads }
+        assertEquals(
+            "a warm-up counted here would inflate every muscle on the map",
+            500.0,
+            quads.volumeKg,
+            0.01,
+        )
+    }
+
+    @Test
+    fun `the muscle map reads a best 1RM straight from the sets`() = runTest {
+        // Never finished through the engine, the way imported history arrives.
+        val s = repo.startSession()
+        repo.logSet(s, squat.id, loadKg = 100.0, reps = 5)
+        repo.finishSession(s, rule)
+
+        val quads = repo.muscleMap().single { it.muscle == Muscle.Quads }
+        // Epley: 100 * (1 + 5/30) = 116.67
+        assertEquals(116.67, quads.bestEstimated1rmKg!!, 0.01)
+    }
+
+    @Test
     fun `volume excludes warm-ups`() = runTest {
         val s = repo.startSession()
         repo.logSet(s, squat.id, SetKind.WarmUp, loadKg = 100.0, reps = 10)  // 1000

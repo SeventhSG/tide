@@ -74,6 +74,7 @@ fun TodayScreen(
     modifier: Modifier = Modifier,
     onStartSession: () -> Unit = {},
     onImport: () -> Unit = {},
+    onMuscles: () -> Unit = {},
 ) {
     var tab by remember { mutableIntStateOf(0) }
     OceanBackground(modifier) {
@@ -152,12 +153,21 @@ fun TodayScreen(
                 // again. It does not claim the database is empty, because
                 // this screen does not read the database yet.
                 Spacer(Modifier.height(12.dp))
-                TideGhostButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "Import from another app",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = TideColors.TextMuted,
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TideGhostButton(onClick = onMuscles, modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Muscle map",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = TideColors.TextMuted,
+                        )
+                    }
+                    TideGhostButton(onClick = onImport, modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Import",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = TideColors.TextMuted,
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(16.dp))

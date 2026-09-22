@@ -1,5 +1,7 @@
 package app.tide.core.data.training
 
+import app.tide.core.data.analysis.MuscleMap
+import app.tide.core.data.analysis.MuscleReading
 import app.tide.core.data.db.BodyWeightDao
 import app.tide.core.data.db.ExerciseDao
 import app.tide.core.data.db.ExerciseEntity
@@ -116,6 +118,34 @@ class TrainingRepository(
     }
 
     suspend fun deleteSet(id: String) = sessions.deleteSet(id)
+
+    // --- analysis ---------------------------------------------------------
+
+    /**
+     * The muscle map over a window ending now.
+     *
+     * The window bounds balance and fatigue only. "Days since trained" reads
+     * the whole history, because a muscle you have not touched in five weeks
+     * is exactly what the map exists to show, and a fortnight's window would
+     * report it as never trained.
+     */
+    suspend fun muscleMap(
+        windowDays: Int = 14,
+        halfLifeHours: Double = MuscleMap.DEFAULT_HALF_LIFE_HOURS,
+    ): List<MuscleReading> {
+        val to = now()
+        val from = to - windowDays * 86_400_000L
+        return MuscleMap.analyse(
+            sets = sessions.workingSetsBetween(from, to),
+            library = exercises.all(),
+            best1rmByExercise = sessions.bestEstimated1rms()
+                .associate { it.exerciseId to it.estimated1rmKg },
+            lastTrainedByExercise = sessions.lastTrainedPerExercise()
+                .associate { it.exerciseId to it.lastAt },
+            now = to,
+            halfLifeHours = halfLifeHours,
+        )
+    }
 
     // --- progression ------------------------------------------------------
 

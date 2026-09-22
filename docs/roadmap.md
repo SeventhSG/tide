@@ -10,9 +10,9 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 10 MB, minSdk 26, targetSdk 35 |
-| Tests | 78 green: 15 pure progression, 7 repository round-trip, 36 importer and CSV, 9 viewmodel, 11 screenshot |
+| Tests | 103 green: 15 progression, 9 repository round-trip, 36 importer and CSV, 15 muscle map, 13 viewmodel, 15 screenshot |
 | Screens rendering | Today, Session logger |
-| Screens wired to data | Session logger, Import |
+| Screens wired to data | Session logger, Import, Muscle map |
 
 The session logger is real: it opens a session, prescribes from history, logs sets to the
 database and reads them back. Today is still hardcoded, and connecting it waits on the
@@ -63,14 +63,26 @@ decoration here: committing a year of training sight unseen is not a decision an
 make well, and the part worth seeing is what could **not** be matched, since those lifts come
 in under their own names and start their own history.
 
-## Next
-
 **2g. Muscle map.** Balance (volume per muscle over a window), fatigue (weighted by proximity
-to estimated 1RM, decaying smoothly rather than dropping out of a hard window), strength
-(days since last trained plus estimated 1RM).
+to estimated 1RM, decaying smoothly with a two day half life rather than dropping out of a
+hard window), strength (days since last trained plus estimated 1RM).
+
+Three readings on three tabs, never rolled into one recovery score. **Fatigue is drawn as a
+bar and never as a number**: it is an index out of a model, comparable only against your own
+other muscles, and printing a percentage would invent a measurement no app can take from a
+set count. The conventions it does rest on are stated on the screen, not buried: a secondary
+muscle counts at half, and the 1RM is an Epley estimate.
+
+No body silhouette. A drawn figure implies the app knows where a muscle sits and how much of
+it was worked. It knows volume attributed by a declared convention, so it shows a list.
+
+## Next
 
 **Retroactive logging as an action.** The flag exists and the importer sets it, but there is
 no way yet to log a session you did yesterday from inside the app.
+
+**An exercise picker.** The logger opens on a hardcoded squat, because choosing a lift needs
+either routines or a browsable library and neither screen exists.
 
 ## Then
 

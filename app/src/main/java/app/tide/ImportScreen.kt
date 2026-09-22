@@ -331,13 +331,13 @@ private fun Failed(state: ImportUiState.Failed) {
 }
 
 /**
- * Thousands split by a thin space, the way Today writes `12 480 kg`.
+ * Thousands split by a space, the way Today writes `12 480 kg`.
  *
  * A comma would read as a decimal point to most of Europe, and this app has
  * no locale setting to disambiguate it.
  */
 private fun Int.grouped(): String =
-    toString().reversed().chunked(3).joinToString(" ").reversed()
+    toString().reversed().chunked(3).joinToString(" ").reversed()
 
 @Composable
 private fun Stat(

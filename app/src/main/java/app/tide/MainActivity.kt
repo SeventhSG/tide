@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 private sealed interface Screen {
     data object Today : Screen
     data object Import : Screen
+    data object Muscles : Screen
     data class Session(val exerciseId: String) : Screen
 }
 
@@ -64,9 +65,14 @@ class MainActivity : ComponentActivity() {
                     is Screen.Today -> TodayScreen(
                         onStartSession = { screen = Screen.Session(DEFAULT_EXERCISE_ID) },
                         onImport = { screen = Screen.Import },
+                        onMuscles = { screen = Screen.Muscles },
                     )
                     is Screen.Session -> WiredSessionScreen(
                         exerciseId = current.exerciseId,
+                        repository = remember { Tide.training(applicationContext) },
+                        onBack = { screen = Screen.Today },
+                    )
+                    is Screen.Muscles -> WiredMuscleMapScreen(
                         repository = remember { Tide.training(applicationContext) },
                         onBack = { screen = Screen.Today },
                     )
@@ -106,6 +112,22 @@ private fun WiredSessionScreen(
         onLoadChange = viewModel::onLoadChange,
         onRepsChange = viewModel::onRepsChange,
         onLogSet = viewModel::onLogSet,
+    )
+}
+
+@Composable
+private fun WiredMuscleMapScreen(
+    repository: TrainingRepository,
+    onBack: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val viewModel = remember { MuscleMapViewModel(repository, scope) }
+    val uiState by viewModel.state.collectAsState()
+
+    MuscleMapScreen(
+        state = uiState,
+        onBack = onBack,
+        onSelectView = viewModel::onSelectView,
     )
 }
 
