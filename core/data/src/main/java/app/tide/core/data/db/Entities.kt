@@ -71,6 +71,18 @@ data class ExerciseEntity(
     val notes: String? = null,
 )
 
+/**
+ * How a routine's days are meant.
+ *
+ * [Fixed] pins exercises to a weekday: Monday is push, whatever happens.
+ * [Rotation] pins them to a named, ordered slot instead: push, then pull, then
+ * legs, on whichever days you actually get to the gym. `dayIndex` on
+ * [RoutineExerciseEntity] means a weekday in the first and a position in the
+ * second, so switching mode clears the plan rather than reinterpreting one as
+ * the other.
+ */
+enum class PlanMode { Fixed, Rotation }
+
 @Entity(tableName = "routine")
 data class RoutineEntity(
     @PrimaryKey val id: String,
@@ -82,6 +94,7 @@ data class RoutineEntity(
      * loads, so a planned light week does not read as a stall.
      */
     val isDeload: Boolean = false,
+    val planMode: PlanMode = PlanMode.Fixed,
     val createdAt: Long,
     val archivedAt: Long? = null,
 )
@@ -110,6 +123,26 @@ data class RoutineExerciseEntity(
     val progressionRule: String? = null,
     /** Exercises sharing a group are a superset, and rest once per round. */
     val supersetGroup: Int? = null,
+)
+
+/**
+ * A rotation slot's name: "Push", "Pull", "Legs".
+ *
+ * Rotation-only. A [PlanMode.Fixed] routine names its days from the calendar
+ * and never writes one of these. There is no row for an empty slot: a slot is
+ * created by naming it, the same way a Fixed day is created by planning it.
+ */
+@Entity(
+    tableName = "routine_day_label",
+    primaryKeys = ["routineId", "dayIndex"],
+    foreignKeys = [
+        ForeignKey(RoutineEntity::class, ["id"], ["routineId"], onDelete = ForeignKey.CASCADE),
+    ],
+)
+data class RoutineDayLabelEntity(
+    val routineId: String,
+    val dayIndex: Int,
+    val label: String,
 )
 
 @Entity(
@@ -205,6 +238,33 @@ data class ScheduleRuleEntity(
     val recurrence: String,
     val anchorEpochDay: Long,
     val untilEpochDay: Long? = null,
+    val createdAt: Long,
+    val archivedAt: Long? = null,
+)
+
+/**
+ * A subscription: something that renews on its own, whether anyone looks or
+ * not.
+ *
+ * Deliberately not a [ScheduleRuleEntity]. A rule resolves against evidence,
+ * Done or Missed, and a renewal has neither: it is not a commitment you keep
+ * or fail, it is a fact that happens on a date. So it gets its own small
+ * table and reads straight through `core:schedule`'s pure `Schedule.expand`,
+ * bypassing the reconciler entirely rather than being mislabelled `Missed`
+ * every time a renewal passes with nobody watching.
+ *
+ * The recurrence is the same string format [RecurrenceCodec] already gives
+ * `schedule_rule`, so a monthly charge, a weekly one and an annual one (a
+ * `MonthlyByDay` with `everyMonths = 12`) are all one column.
+ */
+@Entity(tableName = "subscription")
+data class SubscriptionEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val amount: Double,
+    /** Serialised Recurrence. See RecurrenceCodec. */
+    val recurrence: String,
+    val anchorEpochDay: Long,
     val createdAt: Long,
     val archivedAt: Long? = null,
 )

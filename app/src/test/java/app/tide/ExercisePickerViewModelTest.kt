@@ -5,8 +5,10 @@ import androidx.test.core.app.ApplicationProvider
 import app.tide.core.data.db.Equipment
 import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.Muscle
+import app.tide.core.data.db.PlanMode
 import app.tide.core.data.db.TideDatabase
 import app.tide.core.data.training.TrainingRepository
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,6 +64,7 @@ class ExercisePickerViewModelTest {
             state = db.exerciseState(),
             bodyWeight = db.bodyWeight(),
             now = { clock },
+            zone = ZoneId.of("UTC"),
         )
         db.exercises().upsertAll(listOf(squat, row, bench))
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -154,5 +157,43 @@ class ExercisePickerViewModelTest {
         val state = awaitState { it.inSession }
 
         assertTrue(state.inSession)
+    }
+
+    @Test
+    fun `what is planned today sits above Recent, in fixed mode`() {
+        // 1 700 000 000 000 ms is a Tuesday: dayIndex 1 in the fixed week.
+        runBlocking { repo.addToPlan(1, squat.id) }
+
+        vm = ExercisePickerViewModel(repo, scope, now = { clock })
+        val state = awaitState { it.sections.isNotEmpty() }
+
+        assertEquals("PLANNED", state.sections[0].title)
+        assertEquals("Back squat", state.sections[0].rows[0].name)
+    }
+
+    @Test
+    fun `the planned section names the rotation slot`() {
+        runBlocking {
+            repo.setPlanMode(PlanMode.Rotation)
+            repo.addDay("Push")
+            repo.addToPlan(0, bench.id)
+        }
+
+        vm = ExercisePickerViewModel(repo, scope, now = { clock })
+        val state = awaitState { it.sections.isNotEmpty() }
+
+        assertEquals("PLANNED - PUSH", state.sections[0].title)
+        assertEquals("Bench press", state.sections[0].rows[0].name)
+    }
+
+    @Test
+    fun `nothing planned means no planned section, not an empty one`() {
+        vm = ExercisePickerViewModel(repo, scope, now = { clock })
+        val state = awaitState { it.sections.isNotEmpty() }
+
+        assertTrue(
+            "nothing planned must not show an empty section",
+            state.sections.none { it.title.startsWith("PLANNED") },
+        )
     }
 }

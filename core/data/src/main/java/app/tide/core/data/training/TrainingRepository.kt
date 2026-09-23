@@ -7,7 +7,9 @@ import app.tide.core.data.db.ExerciseDao
 import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.ExerciseStateDao
 import app.tide.core.data.db.ExerciseStateEntity
+import app.tide.core.data.db.PlanMode
 import app.tide.core.data.db.RoutineDao
+import app.tide.core.data.db.RoutineDayLabelEntity
 import app.tide.core.data.db.RoutineEntity
 import app.tide.core.data.db.RoutineExerciseEntity
 import app.tide.core.data.db.SessionDao
@@ -16,6 +18,8 @@ import app.tide.core.data.db.SetKind
 import app.tide.core.data.db.WorkoutSetEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 import kotlin.math.roundToInt
 
@@ -34,6 +38,7 @@ class TrainingRepository(
     private val bodyWeight: BodyWeightDao,
     private val now: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    private val zone: ZoneId = ZoneId.systemDefault(),
 ) {
 
     fun observeExercises(): Flow<List<ExerciseEntity>> = exercises.observeAll()
@@ -108,15 +113,28 @@ class TrainingRepository(
      * Only one session can be open at a time. Resuming beats silently starting a
      * second one and splitting a workout across two rows, which is the kind of
      * corruption you only notice a month later.
+     *
+     * With no routine or day given, this reaches for today's plan itself:
+     * today's weekday in Fixed mode, the next-up slot in Rotation. A caller
+     * that already knows which day it means still wins, so nothing here
+     * overrides an explicit choice.
      */
     suspend fun startSession(routineId: String? = null, dayIndex: Int? = null): String {
         sessions.activeOrNull()?.let { return it.id }
+        var resolvedRoutineId = routineId
+        var resolvedDayIndex = dayIndex
+        if (resolvedRoutineId == null && resolvedDayIndex == null) {
+            plannedToday()?.let {
+                resolvedRoutineId = plan().id
+                resolvedDayIndex = it.dayIndex
+            }
+        }
         val id = newId()
         sessions.upsert(
             SessionEntity(
                 id = id,
-                routineId = routineId,
-                dayIndex = dayIndex,
+                routineId = resolvedRoutineId,
+                dayIndex = resolvedDayIndex,
                 startedAt = now(),
             ),
         )
@@ -175,6 +193,95 @@ class TrainingRepository(
         )
         routines.upsert(routine)
         return routine
+    }
+
+    suspend fun planMode(): PlanMode = plan().planMode
+
+    /**
+     * Switches Fixed and Rotation.
+     *
+     * The two modes give `dayIndex` a different meaning, a weekday against a
+     * rotation position, so there is nothing honest to carry across: switching
+     * clears every planned exercise and rotation label rather than guessing
+     * that Monday meant slot 0.
+     */
+    suspend fun setPlanMode(mode: PlanMode) {
+        val routine = plan()
+        if (routine.planMode == mode) return
+        routines.deleteAllExercises(routine.id)
+        routines.deleteAllDayLabels(routine.id)
+        routines.upsert(routine.copy(planMode = mode))
+    }
+
+    /** Rotation slot labels, by dayIndex. Empty outside Rotation mode. */
+    suspend fun planDayLabels(): Map<Int, String> {
+        val routine = plan()
+        if (routine.planMode != PlanMode.Rotation) return emptyMap()
+        return routines.dayLabelsFor(routine.id).associate { it.dayIndex to it.label }
+    }
+
+    /**
+     * Adds a new rotation slot after every existing one and names it.
+     *
+     * Rotation-only. There is no unnamed slot to create ahead of time: naming
+     * it is how it comes to exist, the same way a Fixed day exists only once
+     * it is actually planned.
+     */
+    suspend fun addDay(label: String): Int {
+        val routine = plan()
+        val nextIndex = (routines.dayLabelsFor(routine.id).maxOfOrNull { it.dayIndex } ?: -1) + 1
+        routines.upsertDayLabel(RoutineDayLabelEntity(routine.id, nextIndex, label))
+        return nextIndex
+    }
+
+    suspend fun renameDay(dayIndex: Int, label: String) {
+        val routine = plan()
+        routines.upsertDayLabel(RoutineDayLabelEntity(routine.id, dayIndex, label))
+    }
+
+    /**
+     * Deletes a rotation slot and everything planned in it, then closes the
+     * gap: every later slot moves down by one, so the rotation stays
+     * consecutive rather than carrying the hole a deleted slot left behind.
+     */
+    suspend fun removeDay(dayIndex: Int) {
+        val routine = plan()
+        val labels = routines.dayLabelsFor(routine.id).sortedBy { it.dayIndex }
+        val allExercises = routines.exercisesFor(routine.id)
+
+        allExercises.filter { it.dayIndex == dayIndex }.forEach { routines.deleteExercise(it.id) }
+        routines.deleteDayLabel(routine.id, dayIndex)
+
+        labels.filter { it.dayIndex > dayIndex }.forEach { label ->
+            routines.deleteDayLabel(routine.id, label.dayIndex)
+            routines.upsertDayLabel(label.copy(dayIndex = label.dayIndex - 1))
+        }
+        allExercises.filter { it.dayIndex > dayIndex }.forEach { row ->
+            routines.upsertExercise(row.copy(dayIndex = row.dayIndex - 1))
+        }
+    }
+
+    /**
+     * Swaps two neighbouring rotation slots: their labels and every exercise
+     * planned in them. Exercises keep their order inside their own slot; only
+     * the slot's place in the rotation moves.
+     */
+    suspend fun moveDay(dayIndex: Int, up: Boolean) {
+        val routine = plan()
+        val labels = routines.dayLabelsFor(routine.id).associateBy { it.dayIndex }
+        val here = labels[dayIndex] ?: return
+        val targetIndex = if (up) dayIndex - 1 else dayIndex + 1
+        val there = labels[targetIndex] ?: return
+
+        routines.upsertDayLabel(here.copy(dayIndex = targetIndex))
+        routines.upsertDayLabel(there.copy(dayIndex = dayIndex))
+
+        routines.exercisesFor(routine.id).forEach { row ->
+            when (row.dayIndex) {
+                dayIndex -> routines.upsertExercise(row.copy(dayIndex = targetIndex))
+                targetIndex -> routines.upsertExercise(row.copy(dayIndex = dayIndex))
+            }
+        }
     }
 
     /** Every planned exercise, by day, in the order they are meant to be done. */
@@ -252,6 +359,38 @@ class TrainingRepository(
                 orderInDay = (target.maxOfOrNull { it.orderInDay } ?: -1) + 1,
             ),
         )
+    }
+
+    /**
+     * What is planned for the slot that matters right now, if anything.
+     *
+     * Fixed: today's weekday, when it has anything planned. Rotation: the slot
+     * after wherever the rotation last left off. Null either way when there is
+     * nothing to say, same as everything else this app declines to invent.
+     */
+    suspend fun plannedToday(): PlannedDay? {
+        val routine = plan()
+        val dayIndex = when (routine.planMode) {
+            PlanMode.Fixed -> Instant.ofEpochMilli(now()).atZone(zone).dayOfWeek.value - 1
+            PlanMode.Rotation -> nextRotationDayIndex(routine.id) ?: return null
+        }
+        val exercises = planDays()[dayIndex].orEmpty()
+        if (exercises.isEmpty()) return null
+        return PlannedDay(dayIndex, exercises)
+    }
+
+    /**
+     * The slot after whichever one the most recently finished session on this
+     * routine was tagged with, wrapping around. Slot 0 when there is no prior
+     * session, or its slot was since deleted: a rotation always has somewhere
+     * to start.
+     */
+    private suspend fun nextRotationDayIndex(routineId: String): Int? {
+        val order = routines.dayLabelsFor(routineId).map { it.dayIndex }.sorted()
+        if (order.isEmpty()) return null
+        val last = sessions.lastForRoutine(routineId)?.dayIndex
+        val position = last?.let { order.indexOf(it) } ?: -1
+        return if (position < 0) order.first() else order[(position + 1) % order.size]
     }
 
     // --- sets -------------------------------------------------------------
@@ -416,6 +555,12 @@ class TrainingRepository(
     }
 
 }
+
+/** The slot that matters right now, and what is planned in it. */
+data class PlannedDay(
+    val dayIndex: Int,
+    val exercises: List<PlannedExercise>,
+)
 
 /** One exercise as it sits in the week's plan. */
 data class PlannedExercise(

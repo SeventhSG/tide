@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import app.tide.core.data.db.Equipment
 import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.Muscle
+import app.tide.core.data.db.PlanMode
+import app.tide.core.data.db.ScheduleKind
 import app.tide.core.data.db.TideDatabase
 import app.tide.core.data.schedule.ScheduleRepository
 import app.tide.core.data.training.TrainingRepository
@@ -119,11 +121,11 @@ class PlannerViewModelTest {
 
     @Test
     fun `a day with nothing in it is a rest day, and says nothing else`() {
-        val state = await { it.days.isNotEmpty() }
+        val state = await { it.slots.isNotEmpty() }
         assertTrue(state.exercises.isEmpty())
         assertEquals(0, state.plannedTotal)
         assertTrue("an empty plan writes no rule", awaitRules(0).isEmpty())
-        assertEquals("today is Wednesday", 2, state.days.indexOfFirst { it.isToday })
+        assertEquals("today is Wednesday", 2, state.slots.indexOfFirst { it.isCurrent })
     }
 
     @Test
@@ -243,5 +245,115 @@ class PlannerViewModelTest {
             "a plan with nothing in it must not leave a rule behind",
             awaitRules(0).isEmpty(),
         )
+    }
+
+    // --- rotation -------------------------------------------------------
+
+    @Test
+    fun `switching to rotation clears the fixed plan and starts empty`() {
+        vm.onSelectDay(0)
+        vm.onAdd("squat")
+        await { it.exercises.size == 1 }
+
+        vm.onSwitchMode(PlanMode.Rotation)
+        val state = await { it.mode == PlanMode.Rotation }
+        assertTrue("a fresh rotation has no slots until one is named", state.slots.isEmpty())
+        assertTrue("switching modes must not carry the old plan across", state.exercises.isEmpty())
+    }
+
+    @Test
+    fun `a rotation day is created by naming it, and selected`() {
+        vm.onSwitchMode(PlanMode.Rotation)
+        await { it.mode == PlanMode.Rotation }
+
+        vm.onAddDay("Push")
+        val state = await { it.slots.isNotEmpty() }
+        assertEquals(listOf("Push"), state.slots.map { it.name })
+        assertEquals(0, state.selectedDay)
+    }
+
+    @Test
+    fun `renaming a rotation day updates its label without moving it`() {
+        vm.onSwitchMode(PlanMode.Rotation)
+        await { it.mode == PlanMode.Rotation }
+        vm.onAddDay("Push")
+        await { it.slots.isNotEmpty() }
+
+        vm.onRenameDay(0, "Upper")
+        assertEquals("Upper", await { it.slots.firstOrNull()?.name == "Upper" }.slots[0].name)
+    }
+
+    @Test
+    fun `moving a rotation day swaps its neighbour and the selection follows it`() {
+        vm.onSwitchMode(PlanMode.Rotation)
+        await { it.mode == PlanMode.Rotation }
+        vm.onAddDay("Push")
+        await { it.slots.size == 1 }
+        vm.onAddDay("Pull")
+        await { it.slots.size == 2 }
+
+        vm.onMoveDayRight(0)
+        val state = await { it.slots.map { s -> s.name } == listOf("Pull", "Push") }
+        assertEquals("Pull was selected and moved to slot 0, so selection follows it there", 0, state.selectedDay)
+    }
+
+    @Test
+    fun `deleting a rotation day compacts the rest and closes the gap in selection`() {
+        vm.onSwitchMode(PlanMode.Rotation)
+        await { it.mode == PlanMode.Rotation }
+        vm.onAddDay("Push")
+        await { it.slots.size == 1 }
+        vm.onAddDay("Pull")
+        await { it.slots.size == 2 }
+        vm.onAddDay("Legs")
+        await { it.slots.size == 3 }
+        vm.onSelectDay(2)
+        await { it.selectedDay == 2 }
+
+        vm.onRemoveDay(0)
+        val state = await { it.slots.size == 2 }
+        assertEquals(listOf("Pull", "Legs"), state.slots.map { it.name })
+        assertEquals("selection shifts down with everything after the deleted slot", 1, state.selectedDay)
+    }
+
+    @Test
+    fun `a line moved to the neighbouring day wraps against the real rotation length, not seven`() {
+        vm.onSwitchMode(PlanMode.Rotation)
+        await { it.mode == PlanMode.Rotation }
+        vm.onAddDay("Push")
+        await { it.slots.size == 1 }
+        vm.onAddDay("Pull")
+        await { it.slots.size == 2 }
+
+        vm.onSelectDay(0)
+        vm.onAdd("squat")
+        val one = await { it.exercises.size == 1 }
+
+        vm.onMoveToDay(one.exercises[0].id, -1)
+        vm.onSelectDay(1)
+        assertEquals(
+            "wrapping left from slot 0 with two slots lands on slot 1, not slot 6",
+            listOf("Back squat"),
+            await { it.exercises.size == 1 }.exercises.map { it.name },
+        )
+    }
+
+    @Test
+    fun `a rotation plan writes a TimesPerWeek quota, not a weekday rule`() {
+        vm.onSwitchMode(PlanMode.Rotation)
+        await { it.mode == PlanMode.Rotation }
+        vm.onAddDay("Push")
+        await { it.slots.size == 1 }
+        vm.onAdd("squat")
+        await { it.exercises.size == 1 }
+        vm.onAddDay("Pull")
+        await { it.slots.size == 2 }
+        vm.onAdd("bench")
+        await { it.plannedTotal == 2 }
+
+        val rules = awaitRules(1)
+        assertEquals("Planned training", rules[0].title)
+        assertEquals(ScheduleKind.Training, rules[0].kind)
+        assertEquals("TimesPerWeek:2", rules[0].recurrence)
     }
 }

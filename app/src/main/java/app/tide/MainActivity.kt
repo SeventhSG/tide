@@ -26,16 +26,20 @@ import app.tide.body.AndroidHealthSource
 import app.tide.body.HealthSource
 import app.tide.core.data.Tide
 import app.tide.core.data.importer.TrainingImporter
+import app.tide.core.data.money.MoneyRepository
 import app.tide.core.data.training.TrainingRepository
 import app.tide.core.design.BootWave
 import app.tide.core.design.TideTheme
 import app.tide.core.design.WaveTransition
+import app.tide.core.design.rememberReducedMotion
 import app.tide.notify.DigestWorker
 import app.tide.notify.NotifyPreferences
 import app.tide.notify.PlanSchedule
 import app.tide.notify.SessionWatchdogWorker
 import app.tide.notify.SleepGuardWorker
+import app.tide.notify.SleepInsightWorker
 import app.tide.onboarding.OnboardingPreferences
+import app.tide.sound.BootSoundPlayer
 import app.tide.sound.OceanSoundPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -104,6 +108,15 @@ class MainActivity : ComponentActivity() {
                 // which hid the boot wave behind it for its entire run: the
                 // animation was playing, just never visible.
                 if (!booted) {
+                    // The one deliberate exception to "nothing plays on its
+                    // own": once, on the way in, in step with the wave
+                    // rising on screen. Skipped under reduced motion, the
+                    // same gate BootWave itself uses, since a sound tied to
+                    // an animation that isn't playing has nothing to be tied to.
+                    val reduceMotion = rememberReducedMotion()
+                    LaunchedEffect(Unit) {
+                        if (!reduceMotion) BootSoundPlayer().play()
+                    }
                     BootWave(Modifier.fillMaxSize()) { booted = true }
                     return@TideTheme
                 }
@@ -208,6 +221,7 @@ class MainActivity : ComponentActivity() {
             when (section) {
                 Section.Today -> WiredTodayScreen(
                     repository = remember { Tide.training(applicationContext) },
+                    moneyRepository = remember { Tide.money(applicationContext) },
                     onStartSession = { go(Screen.Picker(), true) },
                     onImport = { go(Screen.Import, true) },
                     onMuscles = { go(Screen.Muscles, true) },
@@ -226,7 +240,7 @@ class MainActivity : ComponentActivity() {
 
                 Section.Body -> WiredBodyScreen()
 
-                Section.Money -> MoneyScreen()
+                Section.Money -> WiredMoneyScreen()
 
                 Section.Ask -> WiredAskScreen(repository = remember { Tide.training(applicationContext) })
             }
@@ -300,6 +314,7 @@ private fun WiredOnboardingScreen(onDone: () -> Unit) {
 @Composable
 private fun WiredTodayScreen(
     repository: TrainingRepository,
+    moneyRepository: MoneyRepository,
     onStartSession: () -> Unit,
     onImport: () -> Unit,
     onMuscles: () -> Unit,
@@ -307,7 +322,7 @@ private fun WiredTodayScreen(
     onSettings: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val viewModel = remember { TodayViewModel(repository, scope) }
+    val viewModel = remember { TodayViewModel(repository, scope, moneyRepository) }
     val uiState by viewModel.state.collectAsState()
 
     // Coming back from a session, or from a day that turned over while the app
@@ -385,6 +400,12 @@ private fun WiredPlannerScreen(
         onMoveDown = viewModel::onMoveDown,
         onMoveToDay = viewModel::onMoveToDay,
         onRemove = viewModel::onRemove,
+        onSwitchMode = viewModel::onSwitchMode,
+        onAddDay = viewModel::onAddDay,
+        onRenameDay = viewModel::onRenameDay,
+        onRemoveDay = viewModel::onRemoveDay,
+        onMoveDayLeft = viewModel::onMoveDayLeft,
+        onMoveDayRight = viewModel::onMoveDayRight,
     )
 }
 
@@ -428,6 +449,22 @@ private fun WiredBodyScreen() {
                 )
             }
         },
+    )
+}
+
+@Composable
+private fun WiredMoneyScreen() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val viewModel = remember { MoneyViewModel(Tide.money(context.applicationContext), scope) }
+    val uiState by viewModel.state.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
+    MoneyScreen(
+        state = uiState,
+        onAdd = viewModel::onAdd,
+        onRemove = viewModel::onRemove,
     )
 }
 
@@ -582,6 +619,13 @@ private fun WiredSettingsScreen(onBack: () -> Unit) {
                     SleepGuardWorker.cancel(context.applicationContext)
                 }
             },
+            onSleepInsightScheduleChanged = { enabled ->
+                if (enabled) {
+                    SleepInsightWorker.schedule(context.applicationContext)
+                } else {
+                    SleepInsightWorker.cancel(context.applicationContext)
+                }
+            },
             sound = player,
         )
     }
@@ -620,6 +664,7 @@ private fun WiredSettingsScreen(onBack: () -> Unit) {
         onSoundQuieter = viewModel::onSoundQuieter,
         onSoundLouder = viewModel::onSoundLouder,
         onToggleSleepGuard = viewModel::onToggleSleepGuard,
+        onToggleSleepInsight = viewModel::onToggleSleepInsight,
     )
 }
 

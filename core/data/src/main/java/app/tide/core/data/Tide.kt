@@ -7,8 +7,11 @@ import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.Muscle
 import app.tide.core.data.db.MIGRATION_1_2
 import app.tide.core.data.db.MIGRATION_2_3
+import app.tide.core.data.db.MIGRATION_3_4
+import app.tide.core.data.db.MIGRATION_4_5
 import app.tide.core.data.db.TideDatabase
 import app.tide.core.data.importer.TrainingImporter
+import app.tide.core.data.money.MoneyRepository
 import app.tide.core.data.notify.RoomNotificationLedger
 import app.tide.core.notify.Notifier
 import app.tide.core.data.schedule.ScheduleRepository
@@ -33,6 +36,7 @@ object Tide {
     @Volatile private var database: TideDatabase? = null
     @Volatile private var repository: TrainingRepository? = null
     @Volatile private var scheduleRepository: ScheduleRepository? = null
+    @Volatile private var moneyRepository: MoneyRepository? = null
     @Volatile private var notifier: Notifier? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -48,7 +52,7 @@ object Tide {
                 // of the data and there is no server to restore it from, so a
                 // missing migration must fail loudly rather than wipe a year of
                 // training.
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
                 .also {
                     database = it
@@ -74,6 +78,12 @@ object Tide {
         scheduleRepository ?: synchronized(this) {
             scheduleRepository ?: ScheduleRepository(db(context).schedule())
                 .also { scheduleRepository = it }
+        }
+
+    fun money(context: Context): MoneyRepository =
+        moneyRepository ?: synchronized(this) {
+            moneyRepository ?: MoneyRepository(db(context).subscriptions())
+                .also { moneyRepository = it }
         }
 
     /**

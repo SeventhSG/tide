@@ -30,6 +30,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.time.ZoneId
 
 /**
  * The picker photographed over the real seeded library, through the real
@@ -72,6 +73,7 @@ class ExercisePickerScreenshotTest {
             state = db.exerciseState(),
             bodyWeight = db.bodyWeight(),
             now = { clock },
+            zone = ZoneId.of("UTC"),
         )
         db.exercises().upsertAll(library)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -138,5 +140,18 @@ class ExercisePickerScreenshotTest {
         vm.onQueryChange("zercher")
         awaitState(vm) { it.searching && it.sections.isEmpty() }
         capture(vm.state.value, "picker-no-match")
+    }
+
+    @Test
+    fun pickerPlanned() {
+        // 1 700 000 000 000 ms is a Tuesday: dayIndex 1 in the fixed week.
+        runBlocking {
+            repo.addToPlan(1, "squat")
+            repo.addToPlan(1, "bench")
+        }
+
+        val vm = ExercisePickerViewModel(repo, scope, now = { clock })
+        awaitState(vm) { it.sections.isNotEmpty() }
+        capture(vm.state.value, "picker-planned")
     }
 }

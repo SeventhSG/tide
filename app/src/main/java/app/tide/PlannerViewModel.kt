@@ -2,6 +2,7 @@ package app.tide
 
 import app.tide.core.data.db.Equipment
 import app.tide.core.data.db.Muscle
+import app.tide.core.data.db.PlanMode
 import app.tide.core.data.training.TrainingRepository
 import app.tide.notify.PlanSchedule
 import kotlinx.coroutines.CoroutineScope
@@ -17,12 +18,18 @@ import java.time.ZoneId
 import java.util.Locale
 
 /**
- * The week, as a plan rather than as a record.
+ * The plan, as one of two shapes.
  *
- * Seven days, each holding exercises in the order they are meant to be done,
- * because "first, second, third" is most of what a plan is. A day with nothing
- * in it is a rest day and is labelled as one: there is no rest day object to
- * create, and no prompt to fill it.
+ * [PlanMode.Fixed] pins exercises to a weekday: seven slots, always present,
+ * an empty one a rest day. [PlanMode.Rotation] pins them to a named, ordered
+ * slot instead: push, then pull, then legs, on whichever days you actually
+ * train. Both are the same screen and the same `dayIndex`-keyed storage; only
+ * how the slots are labelled, how many there are, and what "current" means
+ * differ, which is why one state shape and one set of handlers cover both.
+ *
+ * Switching mode clears the plan. `dayIndex` means a weekday in one and a
+ * rotation position in the other, and reinterpreting one as the other would
+ * be a guess, not a migration.
  *
  * Nothing here judges. The plan is what you intend; [CalendarScreen] is what
  * happened; the two are never scored against each other.
@@ -81,13 +88,55 @@ class PlannerViewModel(
         } }
     }
 
-    /** Moves a line to the day before or after, landing at the end of it. */
+    /** Moves a line to the neighbouring slot, wrapping around the real slot count. */
     fun onMoveToDay(plannedId: String, dayIndex: Int) {
+        val count = _state.value.slots.size
+        if (count == 0) return
+        val target = ((dayIndex % count) + count) % count
         scope.launch { edits.withLock {
-            repository.movePlannedToDay(plannedId, ((dayIndex % 7) + 7) % 7)
+            repository.movePlannedToDay(plannedId, target)
             render()
         } }
     }
+
+    /** Switches Fixed and Rotation. The caller confirms first; this just clears and switches. */
+    fun onSwitchMode(mode: PlanMode) {
+        scope.launch { edits.withLock {
+            repository.setPlanMode(mode)
+            selectedDay = 0
+            render()
+        } }
+    }
+
+    /** Rotation only. Names and selects a new slot at the end of the rotation. */
+    fun onAddDay(label: String) {
+        if (label.isBlank()) return
+        scope.launch { edits.withLock {
+            selectedDay = repository.addDay(label.trim())
+            render()
+        } }
+    }
+
+    fun onRenameDay(dayIndex: Int, label: String) {
+        if (label.isBlank()) return
+        scope.launch { edits.withLock {
+            repository.renameDay(dayIndex, label.trim())
+            render()
+        } }
+    }
+
+    /** Rotation only. Deletes a slot and closes the gap it leaves. */
+    fun onRemoveDay(dayIndex: Int) {
+        scope.launch { edits.withLock {
+            repository.removeDay(dayIndex)
+            if (selectedDay > dayIndex) selectedDay -= 1
+            render()
+        } }
+    }
+
+    fun onMoveDayLeft(dayIndex: Int) = moveDay(dayIndex, up = true)
+
+    fun onMoveDayRight(dayIndex: Int) = moveDay(dayIndex, up = false)
 
     fun refresh() {
         scope.launch { reload() }
@@ -100,31 +149,71 @@ class PlannerViewModel(
         } }
     }
 
+    private fun moveDay(dayIndex: Int, up: Boolean) {
+        val target = if (up) dayIndex - 1 else dayIndex + 1
+        scope.launch { edits.withLock {
+            repository.moveDay(dayIndex, up)
+            selectedDay = when (selectedDay) {
+                dayIndex -> target
+                target -> dayIndex
+                else -> selectedDay
+            }
+            render()
+        } }
+    }
+
     private suspend fun reload() = edits.withLock { render() }
 
     private suspend fun render() {
+        val routine = repository.plan()
         val byDay = repository.planDays()
         // Kept in step with every edit rather than on a save button, since the
         // plan has no save button.
         runCatching { planSchedule?.sync() }
+
         val todayIndex = Instant.ofEpochMilli(now()).atZone(zone).dayOfWeek.value - 1
 
-        _state.value = PlannerUiState(
-            days = (0..6).map { index ->
+        val slots: List<PlannerUiState.Slot> = when (routine.planMode) {
+            PlanMode.Fixed -> (0..6).map { index ->
                 val planned = byDay[index].orEmpty()
-                PlannerUiState.Day(
+                PlannerUiState.Slot(
                     index = index,
                     letter = DayOfWeek.of(index + 1)
                         .getDisplayName(java.time.format.TextStyle.NARROW, Locale.ENGLISH),
                     name = DayOfWeek.of(index + 1)
                         .getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH),
                     count = planned.size,
-                    isToday = index == todayIndex,
+                    isCurrent = index == todayIndex,
                     isSelected = index == selectedDay,
                 )
-            },
+            }
+            PlanMode.Rotation -> {
+                val labels = repository.planDayLabels()
+                // The slot the app would actually open next, not a calendar day.
+                val nextUp = repository.plannedToday()?.dayIndex
+                labels.keys.sorted().map { index ->
+                    val planned = byDay[index].orEmpty()
+                    val label = labels.getValue(index)
+                    PlannerUiState.Slot(
+                        index = index,
+                        letter = label,
+                        name = label,
+                        count = planned.size,
+                        isCurrent = index == nextUp,
+                        isSelected = index == selectedDay,
+                    )
+                }
+            }
+        }
+
+        if (selectedDay !in slots.indices) selectedDay = 0
+        val dayExercises = byDay[selectedDay].orEmpty()
+
+        _state.value = PlannerUiState(
+            mode = routine.planMode,
+            slots = slots,
             selectedDay = selectedDay,
-            exercises = byDay[selectedDay].orEmpty().mapIndexed { i, p ->
+            exercises = dayExercises.mapIndexed { i, p ->
                 PlannerUiState.Line(
                     id = p.id,
                     position = i + 1,
@@ -133,7 +222,7 @@ class PlannerViewModel(
                     equipment = p.equipment,
                     muscle = p.primaryMuscle,
                     canMoveUp = i > 0,
-                    canMoveDown = i < byDay[selectedDay].orEmpty().lastIndex,
+                    canMoveDown = i < dayExercises.lastIndex,
                 )
             },
             plannedTotal = byDay.values.sumOf { it.size },
@@ -144,18 +233,22 @@ class PlannerViewModel(
 
 /** Pure view state, so the screen renders in a screenshot test with no database. */
 data class PlannerUiState(
-    val days: List<Day> = emptyList(),
+    val mode: PlanMode = PlanMode.Fixed,
+    val slots: List<Slot> = emptyList(),
     val selectedDay: Int = 0,
     val exercises: List<Line> = emptyList(),
     val plannedTotal: Int = 0,
     val trainingDays: Int = 0,
 ) {
-    data class Day(
+    data class Slot(
         val index: Int,
+        /** The chip's short text: a narrow weekday letter, or a rotation label. */
         val letter: String,
+        /** The full name shown above the exercise list. */
         val name: String,
         val count: Int,
-        val isToday: Boolean,
+        /** Fixed: today's weekday. Rotation: the slot the app would open next. */
+        val isCurrent: Boolean,
         val isSelected: Boolean,
     )
 

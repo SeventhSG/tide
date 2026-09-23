@@ -1,6 +1,8 @@
 package app.tide
 
+import app.tide.core.data.db.PlanMode
 import app.tide.core.data.db.SessionEntity
+import app.tide.core.data.money.MoneyRepository
 import app.tide.core.data.training.TrainingRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,7 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -35,6 +36,8 @@ import java.util.Locale
 class TodayViewModel(
     private val repository: TrainingRepository,
     private val scope: CoroutineScope,
+    /** Null in tests that are only about training. No renewal markers without it. */
+    private val moneyRepository: MoneyRepository? = null,
     private val now: () -> Long = System::currentTimeMillis,
     private val zone: ZoneId = ZoneId.systemDefault(),
 ) {
@@ -76,6 +79,10 @@ class TodayViewModel(
 
         val volume = repository.volumeBetween(now() - 7 * DAY_MS, now())
 
+        // Once something is open or already logged today, the plan has
+        // already done its job: repeating it would be the app checking in.
+        val planned = if (active == null && !trainedToday) plannedLine() else null
+
         _state.value = TodayUiState(
             dateLabel = dateLabel(today),
             headline = when {
@@ -93,18 +100,78 @@ class TodayViewModel(
             // Absent rather than zero: a week with no training has no volume to
             // report, and "0 kg" reads as a measurement of nothing.
             volumeLast7Days = if (volume > 0) "${volume.toInt().grouped()} kg" else null,
-            week = DayOfWeek.entries.mapIndexed { i, day ->
-                TodayUiState.Day(
-                    letter = day.getDisplayName(java.time.format.TextStyle.NARROW, Locale.ENGLISH),
-                    trained = i in trainedDays,
-                    isToday = i == (today.dayOfWeek.value - 1),
-                )
-            },
+            calendarMonth = calendarMonth(today),
             weekSummary = when (trainedDays.size) {
                 0 -> "NONE YET"
                 1 -> "1 SESSION"
                 else -> "${trainedDays.size} SESSIONS"
             },
+            planned = planned,
+        )
+    }
+
+    /**
+     * This month, everything on one grid: training, the plan and money
+     * renewals together, which is the one place they otherwise never meet.
+     *
+     * Rotation plans mark no day here. A rotation slot has no weekday, and
+     * only "today" has a real next-up answer; painting a guess across the
+     * rest of the month would be inventing a plan the rotation never made.
+     */
+    private suspend fun calendarMonth(today: LocalDate): List<TodayUiState.CalendarDay> {
+        val monthStart = today.withDayOfMonth(1)
+        val monthEnd = today.withDayOfMonth(today.lengthOfMonth())
+
+        val sessions = repository.sessionsBetween(startOfDay(monthStart), startOfDay(monthEnd.plusDays(1)))
+            .filter { it.endedAt != null }
+        val trainedDates = sessions
+            .map { Instant.ofEpochMilli(it.startedAt).atZone(zone).toLocalDate() }
+            .toSet()
+
+        val plannedWeekdays = if (repository.planMode() == PlanMode.Fixed) {
+            repository.planDays().filterValues { it.isNotEmpty() }.keys
+        } else {
+            emptySet()
+        }
+
+        val moneyDates = moneyRepository?.upcoming(monthStart, monthEnd)
+            ?.map { it.date }
+            ?.toSet()
+            .orEmpty()
+
+        // Weeks start on Monday, so the offset is how many blanks come first.
+        val lead = (monthStart.dayOfWeek.value + 6) % 7
+        val cells = buildList<LocalDate?> {
+            repeat(lead) { add(null) }
+            (1..monthEnd.dayOfMonth).forEach { add(monthStart.withDayOfMonth(it)) }
+        }
+
+        return cells.map { date ->
+            TodayUiState.CalendarDay(
+                date = date,
+                label = date?.dayOfMonth?.toString() ?: "",
+                trained = date != null && date in trainedDates,
+                planned = date != null && (date.dayOfWeek.value - 1) in plannedWeekdays,
+                moneyDue = date != null && date in moneyDates,
+                isToday = date == today,
+            )
+        }
+    }
+
+    /**
+     * One line naming what is planned, if the plan has anything real to say.
+     * Fixed names no day, since "today" already means today. Rotation names
+     * the slot, since a rotation day is not otherwise self-evident.
+     */
+    private suspend fun plannedLine(): TodayUiState.Planned? {
+        val plan = repository.plannedToday() ?: return null
+        val names = plan.exercises.joinToString(", ") { it.name }
+        val label = when (repository.planMode()) {
+            PlanMode.Rotation -> repository.planDayLabels()[plan.dayIndex]
+            PlanMode.Fixed -> null
+        }
+        return TodayUiState.Planned(
+            if (label != null) "Planned: $label, $names" else "Planned: $names",
         )
     }
 
@@ -136,10 +203,21 @@ data class TodayUiState(
     val resuming: Boolean = false,
     /** Null when nothing was logged in the window. Zero is not a reading. */
     val volumeLast7Days: String? = null,
-    val week: List<Day> = emptyList(),
+    val calendarMonth: List<CalendarDay> = emptyList(),
     val weekSummary: String = "",
+    /** Null whenever there is nothing planned, or nothing left to say about it today. */
+    val planned: Planned? = null,
 ) {
-    data class Day(val letter: String, val trained: Boolean, val isToday: Boolean)
+    data class CalendarDay(
+        /** Null for the blanks before the first of the month. */
+        val date: LocalDate?,
+        val label: String,
+        val trained: Boolean,
+        val planned: Boolean,
+        val moneyDue: Boolean,
+        val isToday: Boolean,
+    )
+    data class Planned(val line: String)
 }
 
 private fun dateLabel(date: LocalDate): String =

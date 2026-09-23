@@ -1,5 +1,6 @@
 package app.tide.notify
 
+import app.tide.core.data.db.PlanMode
 import app.tide.core.data.db.ScheduleKind
 import app.tide.core.data.schedule.ScheduleRepository
 import app.tide.core.data.training.TrainingRepository
@@ -44,13 +45,15 @@ class PlanSchedule(
 
         if (days.isEmpty()) return
 
-        schedule.addRule(
-            title = TITLE,
-            kind = ScheduleKind.Training,
-            recurrence = Recurrence.Weekly(
-                days = days.map { DayOfWeek.of(it + 1) }.toSet(),
-            ),
-        )
+        // Fixed plans a weekday, so the rule knows which one. Rotation plans a
+        // count instead: "three times this week", on whichever days you get
+        // to the gym, because a rotation slot has no weekday to be late on.
+        val recurrence = when (training.planMode()) {
+            PlanMode.Fixed -> Recurrence.Weekly(days = days.map { DayOfWeek.of(it + 1) }.toSet())
+            PlanMode.Rotation -> Recurrence.TimesPerWeek(times = days.size)
+        }
+
+        schedule.addRule(title = TITLE, kind = ScheduleKind.Training, recurrence = recurrence)
     }
 
     private companion object {

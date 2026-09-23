@@ -2,6 +2,9 @@ package app.tide
 
 import app.tide.core.data.db.ExerciseEntity
 import app.tide.core.data.db.Muscle
+import app.tide.core.data.db.PlanMode
+import app.tide.core.data.training.PlannedDay
+import app.tide.core.data.training.PlannedExercise
 import app.tide.core.data.training.TrainingRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,11 +36,15 @@ class ExercisePickerViewModel(
     private var libraryCount = 0
     private var lastTrained: Map<String, Long> = emptyMap()
     private var inSession = false
+    private var planned: PlannedDay? = null
+    private var plannedTitle = "PLANNED"
 
     init {
         scope.launch {
             libraryCount = repository.library().size
             lastTrained = repository.lastTrainedByExercise()
+            planned = repository.plannedToday()
+            plannedTitle = plannedTitle(planned)
             load()
         }
         scope.launch {
@@ -62,9 +69,21 @@ class ExercisePickerViewModel(
         render(if (typed.isBlank()) browse(matches) else results(matches))
     }
 
-    /** The library with a recent section on top, then grouped by primary muscle. */
+    private suspend fun plannedTitle(plan: PlannedDay?): String {
+        if (plan == null) return "PLANNED"
+        return when (repository.planMode()) {
+            PlanMode.Rotation -> repository.planDayLabels()[plan.dayIndex]
+                ?.let { "PLANNED - ${it.uppercase()}" } ?: "PLANNED"
+            PlanMode.Fixed -> "PLANNED"
+        }
+    }
+
+    /** The library with what is planned on top, a recent section, then grouped by muscle. */
     private fun browse(all: List<ExerciseEntity>): List<ExercisePickerUiState.Section> {
         val sections = mutableListOf<ExercisePickerUiState.Section>()
+        planned?.exercises?.takeIf { it.isNotEmpty() }?.let { rows ->
+            sections += ExercisePickerUiState.Section(plannedTitle, rows.map { plannedRow(it) })
+        }
         val recent = all
             .filter { lastTrained.containsKey(it.id) }
             .sortedByDescending { lastTrained.getValue(it.id) }
@@ -88,6 +107,19 @@ class ExercisePickerViewModel(
         val label = if (matches.size == 1) "1 MATCH" else "${matches.size} MATCHES"
         return listOf(
             ExercisePickerUiState.Section(label, matches.map { row(it, withMuscle = true) }),
+        )
+    }
+
+    private fun plannedRow(p: PlannedExercise): ExercisePickerUiState.Row {
+        val equipment = p.equipment?.name?.replace(Regex("([a-z])([A-Z])"), "$1 $2")?.uppercase()
+        val muscle = p.primaryMuscle?.let { muscleLabel(it).uppercase() }
+        return ExercisePickerUiState.Row(
+            id = p.exerciseId,
+            name = p.name,
+            detail = listOfNotNull(equipment, muscle).joinToString(", "),
+            equipment = p.equipment,
+            muscle = p.primaryMuscle,
+            lastTrained = lastTrained[p.exerciseId]?.let { sinceLabel(now() - it) },
         )
     }
 

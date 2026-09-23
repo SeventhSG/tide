@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,6 +41,7 @@ import app.tide.core.design.TideTheme
 import app.tide.core.design.tidePress
 import androidx.compose.material3.Icon
 import app.tide.core.design.oceanScrimColor
+import java.time.LocalDate
 
 /**
  * Today.
@@ -97,6 +99,18 @@ fun TodayScreen(
                 )
             }
 
+            // Only while there is still something to say: once a session is
+            // open or something is already logged today, the plan has done
+            // its job and repeating it would be noise.
+            state.planned?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    it.line,
+                    style = LabelStyle,
+                    color = TideColors.TextFaint,
+                )
+            }
+
             // No "Skip today". Skipping is only meaningful against a plan,
             // and there is no planner yet, so the button would be a gesture
             // at a schedule that does not exist.
@@ -121,7 +135,7 @@ fun TodayScreen(
             }
 
             Spacer(Modifier.height(10.dp))
-            WeekStrip(state)
+            MonthCalendar(state)
 
             // Quiet, because both matter enormously on day one and rarely
             // after it.
@@ -189,53 +203,89 @@ private fun TopBar(onSettings: () -> Unit) {
 }
 
 /**
- * The week, at a glance: the days trained, and which one is today.
+ * The month, at a glance: training, the plan and money renewals, all on one
+ * grid, which is the one place this app puts them together.
  *
- * Two states per day, not three. A "planned" day needs a plan, and until the
- * planner exists an empty square means only that nothing was logged. It is a
- * fact, and there is no red, no flame and no tally of what was missed.
+ * A filled square is a day actually trained. A hairline ring is a day the
+ * plan says is a training day (Fixed only; a rotation has no weekday to mark
+ * across a month, only a real answer for today). A small dot is a
+ * subscription renewing. A square can carry more than one of these at once,
+ * and none of it is a verdict: a blank day is drawn blank, and nothing is
+ * said about it.
  *
  * The count reads "2 SESSIONS" rather than "2 of 4 done", because nothing has
  * declared how many days this week was meant to hold.
  */
 @Composable
-private fun WeekStrip(state: TodayUiState) {
+private fun MonthCalendar(state: TodayUiState) {
     Scrim {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("THIS WEEK", style = LabelStyle, color = TideColors.TextFaint)
+            Text("THIS MONTH", style = LabelStyle, color = TideColors.TextFaint)
             Spacer(Modifier.weight(1f))
             Text(state.weekSummary, style = DataStyle, color = TideColors.TextMuted)
         }
         Spacer(Modifier.height(14.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            state.week.forEach { d ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        d.letter,
-                        style = LabelStyle,
-                        color = if (d.isToday) TideColors.Text else TideColors.TextFaint,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Box(
-                        Modifier
-                            .size(30.dp)
-                            .clip(ContinuousCornerShape(11.dp))
-                            .background(
-                                if (d.trained) TideColors.Accent.copy(alpha = 0.90f)
-                                else Color.White.copy(alpha = 0.05f),
-                            )
-                            .border(
-                                1.dp,
-                                if (d.isToday) TideColors.Text.copy(alpha = 0.55f)
-                                else Color.Transparent,
-                                ContinuousCornerShape(11.dp),
-                            ),
-                    )
-                }
+        Row(Modifier.fillMaxWidth()) {
+            listOf("M", "T", "W", "T", "F", "S", "S").forEach {
+                Text(
+                    it,
+                    style = LabelStyle,
+                    color = TideColors.TextFaint,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
             }
+        }
+        Spacer(Modifier.height(8.dp))
+        state.calendarMonth.chunked(7).forEach { week ->
+            Row(Modifier.fillMaxWidth()) {
+                week.forEach { day -> CalendarCell(day, Modifier.weight(1f)) }
+                repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarCell(day: TodayUiState.CalendarDay, modifier: Modifier = Modifier) {
+    if (day.date == null) {
+        Box(modifier.aspectRatio(1f))
+        return
+    }
+    val shape = ContinuousCornerShape(10.dp)
+    Box(
+        modifier
+            .aspectRatio(1f)
+            .padding(2.dp)
+            .clip(shape)
+            .background(
+                if (day.trained) TideColors.Accent.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.05f),
+            )
+            .border(
+                1.dp,
+                when {
+                    day.isToday -> TideColors.Text.copy(alpha = 0.55f)
+                    day.planned -> TideColors.Text.copy(alpha = 0.25f)
+                    else -> Color.Transparent
+                },
+                shape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            day.label,
+            style = LabelStyle,
+            color = if (day.trained) TideColors.OnAccent else TideColors.TextMuted,
+        )
+        if (day.moneyDue) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(3.dp)
+                    .size(5.dp)
+                    .clip(CircleShape)
+                    .background(TideColors.Warning),
+            )
         }
     }
 }
@@ -285,6 +335,7 @@ private fun DriftRow(
 @Preview(widthDp = 411, heightDp = 891)
 @Composable
 private fun TodayPreview() {
+    val month = LocalDate.of(2026, 9, 1)
     TideTheme {
         TodayScreen(
             TodayUiState(
@@ -292,15 +343,18 @@ private fun TodayPreview() {
                 headline = "No session\nyet today.",
                 subline = "Last session was 2 days ago.",
                 volumeLast7Days = "12 480 kg",
-                week = listOf(
-                    TodayUiState.Day("M", trained = true, isToday = false),
-                    TodayUiState.Day("T", trained = false, isToday = true),
-                    TodayUiState.Day("W", trained = false, isToday = false),
-                    TodayUiState.Day("T", trained = false, isToday = false),
-                    TodayUiState.Day("F", trained = false, isToday = false),
-                    TodayUiState.Day("S", trained = false, isToday = false),
-                    TodayUiState.Day("S", trained = false, isToday = false),
-                ),
+                calendarMonth = List(1) {
+                    TodayUiState.CalendarDay(null, "", trained = false, planned = false, moneyDue = false, isToday = false)
+                } + (1..30).map {
+                    TodayUiState.CalendarDay(
+                        date = month.withDayOfMonth(it),
+                        label = it.toString(),
+                        trained = it in listOf(14, 16, 18),
+                        planned = it in listOf(14, 16, 18, 21, 23, 25, 28, 30),
+                        moneyDue = it == 22,
+                        isToday = it == 22,
+                    )
+                },
                 weekSummary = "1 SESSION",
             ),
         )

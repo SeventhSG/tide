@@ -18,6 +18,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.time.LocalDate
 
 /**
  * The sections added in v0.1.1, rendered at phone size.
@@ -57,15 +58,16 @@ class V011ScreenshotTest {
                         headline = "No session\nyet today.",
                         subline = "Last session was 2 days ago.",
                         volumeLast7Days = "12 480 kg",
-                        week = listOf(
-                            TodayUiState.Day("M", trained = true, isToday = false),
-                            TodayUiState.Day("T", trained = false, isToday = true),
-                            TodayUiState.Day("W", trained = false, isToday = false),
-                            TodayUiState.Day("T", trained = false, isToday = false),
-                            TodayUiState.Day("F", trained = false, isToday = false),
-                            TodayUiState.Day("S", trained = false, isToday = false),
-                            TodayUiState.Day("S", trained = false, isToday = false),
-                        ),
+                        calendarMonth = (1..22).map {
+                            TodayUiState.CalendarDay(
+                                date = LocalDate.of(2026, 9, it),
+                                label = it.toString(),
+                                trained = it == 20,
+                                planned = false,
+                                moneyDue = false,
+                                isToday = it == 22,
+                            )
+                        },
                         weekSummary = "1 SESSION",
                     ),
                 )
@@ -105,14 +107,14 @@ class V011ScreenshotTest {
         capture("planner") {
             PlannerScreen(
                 PlannerUiState(
-                    days = listOf(
-                        PlannerUiState.Day(0, "M", "Monday", 3, isToday = false, isSelected = true),
-                        PlannerUiState.Day(1, "T", "Tuesday", 0, isToday = false, isSelected = false),
-                        PlannerUiState.Day(2, "W", "Wednesday", 3, isToday = true, isSelected = false),
-                        PlannerUiState.Day(3, "T", "Thursday", 0, isToday = false, isSelected = false),
-                        PlannerUiState.Day(4, "F", "Friday", 4, isToday = false, isSelected = false),
-                        PlannerUiState.Day(5, "S", "Saturday", 0, isToday = false, isSelected = false),
-                        PlannerUiState.Day(6, "S", "Sunday", 0, isToday = false, isSelected = false),
+                    slots = listOf(
+                        PlannerUiState.Slot(0, "M", "Monday", 3, isCurrent = false, isSelected = true),
+                        PlannerUiState.Slot(1, "T", "Tuesday", 0, isCurrent = false, isSelected = false),
+                        PlannerUiState.Slot(2, "W", "Wednesday", 3, isCurrent = true, isSelected = false),
+                        PlannerUiState.Slot(3, "T", "Thursday", 0, isCurrent = false, isSelected = false),
+                        PlannerUiState.Slot(4, "F", "Friday", 4, isCurrent = false, isSelected = false),
+                        PlannerUiState.Slot(5, "S", "Saturday", 0, isCurrent = false, isSelected = false),
+                        PlannerUiState.Slot(6, "S", "Sunday", 0, isCurrent = false, isSelected = false),
                     ),
                     selectedDay = 0,
                     exercises = listOf(
@@ -144,17 +146,48 @@ class V011ScreenshotTest {
         capture("planner-rest") {
             PlannerScreen(
                 PlannerUiState(
-                    days = (0..6).map {
-                        PlannerUiState.Day(
+                    slots = (0..6).map {
+                        PlannerUiState.Slot(
                             it,
                             listOf("M", "T", "W", "T", "F", "S", "S")[it],
                             "Day",
                             count = 0,
-                            isToday = it == 1,
+                            isCurrent = it == 1,
                             isSelected = it == 1,
                         )
                     },
                     selectedDay = 1,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun plannerRotation() {
+        capture("planner-rotation") {
+            PlannerScreen(
+                PlannerUiState(
+                    mode = app.tide.core.data.db.PlanMode.Rotation,
+                    slots = listOf(
+                        PlannerUiState.Slot(0, "Push", "Push", 3, isCurrent = false, isSelected = false),
+                        PlannerUiState.Slot(1, "Pull", "Pull", 3, isCurrent = true, isSelected = true),
+                        PlannerUiState.Slot(2, "Legs", "Legs", 0, isCurrent = false, isSelected = false),
+                    ),
+                    selectedDay = 1,
+                    exercises = listOf(
+                        PlannerUiState.Line(
+                            "1", 1, "Barbell row", "3 x 8",
+                            Equipment.Barbell, Muscle.Back,
+                            canMoveUp = false, canMoveDown = true,
+                        ),
+                        PlannerUiState.Line(
+                            "2", 2, "Lat pulldown", "3 x 10",
+                            Equipment.Cable, Muscle.Lats,
+                            canMoveUp = true, canMoveDown = false,
+                        ),
+                    ),
+                    plannedTotal = 6,
+                    trainingDays = 2,
                 ),
             )
         }
@@ -229,7 +262,30 @@ class V011ScreenshotTest {
     fun money() {
         capture("money") {
             TideScaffold(section = Section.Money, onSelectSection = {}) {
-                MoneyScreen()
+                MoneyScreen(MoneyUiState())
+            }
+        }
+    }
+
+    @Test
+    fun moneyWithSubscriptions() {
+        capture("money-subscriptions") {
+            TideScaffold(section = Section.Money, onSelectSection = {}) {
+                MoneyScreen(
+                    MoneyUiState(
+                        subscriptions = listOf(
+                            MoneyUiState.Subscription(
+                                id = "1", name = "Gym", amountLabel = "45",
+                                nextRenewal = null, nextRenewalLabel = "1 OCTOBER",
+                            ),
+                            MoneyUiState.Subscription(
+                                id = "2", name = "Streaming", amountLabel = "12.99",
+                                nextRenewal = null, nextRenewalLabel = "8 OCTOBER",
+                            ),
+                        ),
+                        monthlyTotalLabel = "57.99",
+                    ),
+                )
             }
         }
     }

@@ -26,6 +26,9 @@ class Converters {
 
     @TypeConverter fun scheduleKindToString(v: ScheduleKind): String = v.name
     @TypeConverter fun stringToScheduleKind(v: String): ScheduleKind = ScheduleKind.valueOf(v)
+
+    @TypeConverter fun planModeToString(v: PlanMode): String = v.name
+    @TypeConverter fun stringToPlanMode(v: String): PlanMode = PlanMode.valueOf(v)
 }
 
 @Dao
@@ -68,8 +71,21 @@ interface RoutineDao {
     @Query("DELETE FROM routine_exercise WHERE id = :id")
     suspend fun deleteExercise(id: String)
 
+    @Query("SELECT * FROM routine_day_label WHERE routineId = :routineId ORDER BY dayIndex")
+    suspend fun dayLabelsFor(routineId: String): List<RoutineDayLabelEntity>
+
+    @Query("DELETE FROM routine_day_label WHERE routineId = :routineId AND dayIndex = :dayIndex")
+    suspend fun deleteDayLabel(routineId: String, dayIndex: Int)
+
+    @Query("DELETE FROM routine_day_label WHERE routineId = :routineId")
+    suspend fun deleteAllDayLabels(routineId: String)
+
+    @Query("DELETE FROM routine_exercise WHERE routineId = :routineId")
+    suspend fun deleteAllExercises(routineId: String)
+
     @Upsert suspend fun upsert(r: RoutineEntity)
     @Upsert suspend fun upsertExercise(e: RoutineExerciseEntity)
+    @Upsert suspend fun upsertDayLabel(e: RoutineDayLabelEntity)
 }
 
 @Dao
@@ -88,6 +104,13 @@ interface SessionDao {
 
     @Query("SELECT * FROM session WHERE startedAt BETWEEN :from AND :to ORDER BY startedAt")
     suspend fun between(from: Long, to: Long): List<SessionEntity>
+
+    /** The last finished session tagged to this routine, for rotation's "next up". */
+    @Query(
+        "SELECT * FROM session WHERE routineId = :routineId AND endedAt IS NOT NULL " +
+            "ORDER BY startedAt DESC LIMIT 1",
+    )
+    suspend fun lastForRoutine(routineId: String): SessionEntity?
 
     @Upsert suspend fun upsert(s: SessionEntity)
 
@@ -270,6 +293,20 @@ interface ScheduleDao {
 }
 
 @Dao
+interface SubscriptionDao {
+    @Query("SELECT * FROM subscription WHERE archivedAt IS NULL ORDER BY createdAt")
+    fun observeActive(): Flow<List<SubscriptionEntity>>
+
+    @Query("SELECT * FROM subscription WHERE archivedAt IS NULL ORDER BY createdAt")
+    suspend fun active(): List<SubscriptionEntity>
+
+    @Upsert suspend fun upsert(s: SubscriptionEntity)
+
+    @Query("UPDATE subscription SET archivedAt = :at WHERE id = :id")
+    suspend fun archive(id: String, at: Long)
+}
+
+@Dao
 interface NotificationLedgerDao {
 
     @Query(
@@ -366,11 +403,62 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/**
+ * Version 4 adds the rotation plan shape.
+ *
+ * `planMode` defaults every existing routine to `Fixed`, which is what it
+ * already was: a routine before this version had no other shape. The new
+ * table is empty until a routine actually switches to `Rotation`.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE routine ADD COLUMN planMode TEXT NOT NULL DEFAULT 'Fixed'")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `routine_day_label` (
+                `routineId` TEXT NOT NULL,
+                `dayIndex` INTEGER NOT NULL,
+                `label` TEXT NOT NULL,
+                PRIMARY KEY(`routineId`, `dayIndex`),
+                FOREIGN KEY(`routineId`) REFERENCES `routine`(`id`)
+                    ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
+/**
+ * Version 5 adds subscriptions.
+ *
+ * A pure addition, tested the same way as every migration before it: nothing
+ * existing is touched.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `subscription` (
+                `id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `amount` REAL NOT NULL,
+                `recurrence` TEXT NOT NULL,
+                `anchorEpochDay` INTEGER NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `archivedAt` INTEGER,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
 @Database(
     entities = [
         ExerciseEntity::class,
         RoutineEntity::class,
         RoutineExerciseEntity::class,
+        RoutineDayLabelEntity::class,
         SessionEntity::class,
         WorkoutSetEntity::class,
         BodyWeightEntity::class,
@@ -378,8 +466,9 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         ScheduleRuleEntity::class,
         SkippedOccurrenceEntity::class,
         NotificationLedgerEntity::class,
+        SubscriptionEntity::class,
     ],
-    version = 3,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -391,6 +480,7 @@ abstract class TideDatabase : RoomDatabase() {
     abstract fun bodyWeight(): BodyWeightDao
     abstract fun schedule(): ScheduleDao
     abstract fun notificationLedger(): NotificationLedgerDao
+    abstract fun subscriptions(): SubscriptionDao
 
     companion object {
         const val NAME = "tide.db"

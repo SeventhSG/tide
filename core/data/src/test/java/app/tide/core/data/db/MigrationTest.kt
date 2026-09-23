@@ -90,6 +90,87 @@ class MigrationTest {
     }
 
     @Test
+    fun `version 3 data survives the move to version 4`() {
+        helper.createDatabase(name, 3).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO routine (id, name, defaultProgressionRule, isDeload, createdAt, archivedAt)
+                VALUES ('r1', 'My week', 'Linear:2.5:3:0.9', 0, 1000, NULL)
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT INTO exercise (id, name, primaryMuscle, secondaryMuscles, equipment,
+                                      isBodyweight, isCustom, progressionRule, notes)
+                VALUES ('squat', 'Back squat', 'Quads', 'Glutes', 'Barbell', 0, 0, 'Linear:2.5:3:0.9', NULL)
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                INSERT INTO routine_exercise (id, routineId, exerciseId, dayIndex, orderInDay,
+                                              targetSets, targetReps, repCeiling, targetLoadKg,
+                                              targetDurationSec, progressionRule, supersetGroup)
+                VALUES ('re1', 'r1', 'squat', 0, 0, 3, 5, NULL, NULL, NULL, NULL, NULL)
+                """.trimIndent(),
+            )
+        }
+
+        // Room validates the resulting schema against 4.json here, so a
+        // hand-written CREATE TABLE that drifts from the entity fails loudly.
+        helper.runMigrationsAndValidate(name, 4, true, MIGRATION_3_4).use { db ->
+            db.query("SELECT id, planMode FROM routine").use { cursor ->
+                assertTrue("the routine must still be there", cursor.moveToFirst())
+                assertEquals("r1", cursor.getString(0))
+                assertEquals("an existing routine keeps meaning what it always meant", "Fixed", cursor.getString(1))
+            }
+            db.query("SELECT COUNT(*) FROM routine_exercise").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(1, cursor.getInt(0))
+            }
+            // And the new table is usable, not merely present.
+            db.execSQL(
+                "INSERT INTO routine_day_label (routineId, dayIndex, label) VALUES ('r1', 0, 'Push')",
+            )
+            db.query("SELECT COUNT(*) FROM routine_day_label").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(1, cursor.getInt(0))
+            }
+        }
+    }
+
+    @Test
+    fun `version 4 data survives the move to version 5`() {
+        helper.createDatabase(name, 4).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO routine (id, name, defaultProgressionRule, isDeload, planMode, createdAt, archivedAt)
+                VALUES ('r1', 'My week', 'Linear:2.5:3:0.9', 0, 'Fixed', 1000, NULL)
+                """.trimIndent(),
+            )
+        }
+
+        // Room validates the resulting schema against 5.json here, so a
+        // hand-written CREATE TABLE that drifts from the entity fails loudly.
+        helper.runMigrationsAndValidate(name, 5, true, MIGRATION_4_5).use { db ->
+            db.query("SELECT COUNT(*) FROM routine").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals("the routine from before this migration must still be there", 1, cursor.getInt(0))
+            }
+            // And the new table is usable, not merely present.
+            db.execSQL(
+                """
+                INSERT INTO subscription (id, name, amount, recurrence, anchorEpochDay, createdAt, archivedAt)
+                VALUES ('sub1', 'Gym', 45.0, 'MonthlyByDay:1:1', 19000, 1000, NULL)
+                """.trimIndent(),
+            )
+            db.query("SELECT COUNT(*) FROM subscription").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(1, cursor.getInt(0))
+            }
+        }
+    }
+
+    @Test
     fun `the whole chain runs, from version 1 to the current version`() {
         // The path a phone that installed the app early actually takes. Each
         // migration is tested on its own above; this is the one that catches a
@@ -104,10 +185,13 @@ class MigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(name, 3, true, MIGRATION_1_2, MIGRATION_2_3).use { db ->
+        helper.runMigrationsAndValidate(
+            name, 5, true,
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+        ).use { db ->
             db.query("SELECT COUNT(*) FROM session").use { cursor ->
                 cursor.moveToFirst()
-                assertEquals("a session from version 1 must survive both steps", 1, cursor.getInt(0))
+                assertEquals("a session from version 1 must survive every step", 1, cursor.getInt(0))
             }
             db.execSQL(
                 """
@@ -123,7 +207,7 @@ class MigrationTest {
     }
 
     @Test
-    fun `a fresh version 3 database opens and carries every table`() {
+    fun `a fresh version 5 database opens and carries every table`() {
         val db = Room.inMemoryDatabaseBuilder(
             InstrumentationRegistry.getInstrumentation().targetContext,
             TideDatabase::class.java,
@@ -138,6 +222,7 @@ class MigrationTest {
             listOf(
                 "exercise", "session", "workout_set", "exercise_state",
                 "schedule_rule", "skipped_occurrence", "notification_ledger",
+                "routine_day_label", "subscription",
             ).forEach {
                 assertTrue("$it missing from a fresh build", it in tables)
             }
