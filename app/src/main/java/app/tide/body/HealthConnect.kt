@@ -34,6 +34,18 @@ interface HealthSource {
     /** A window's worth of readings. Anything missing comes back null. */
     suspend fun read(from: Instant, to: Instant): HealthReadings
 
+    /**
+     * Individual sleep sessions in the window, unaggregated.
+     *
+     * [read] sums sleep across the whole window into one figure, which is
+     * right for "how much did you sleep today" and wrong for "what is normal
+     * for you": averaging that sum over a fixed number of days would count a
+     * night Health Connect never synced as a zero rather than as missing.
+     * This lets the caller bucket by night itself and average only the
+     * nights that actually have one.
+     */
+    suspend fun sleepSessions(from: Instant, to: Instant): List<SleepSession>
+
     enum class Availability { Available, NotInstalled, NotSupported }
 
     companion object {
@@ -64,6 +76,11 @@ data class HealthReadings(
     val weightKg: Double? = null,
     val weightAt: Instant? = null,
 )
+
+/** One sleep session, unaggregated, so a caller can group it by night. */
+data class SleepSession(val start: Instant, val end: Instant) {
+    val duration: Duration get() = Duration.between(start, end)
+}
 
 /** The real one. Everything it can throw is caught at the edge in [BodyViewModel]. */
 class AndroidHealthSource(private val context: Context) : HealthSource {
@@ -112,5 +129,11 @@ class AndroidHealthSource(private val context: Context) : HealthSource {
             weightKg = weight?.weight?.inKilograms,
             weightAt = weight?.time,
         )
+    }
+
+    override suspend fun sleepSessions(from: Instant, to: Instant): List<SleepSession> {
+        val client = client ?: return emptyList()
+        return client.readRecords(ReadRecordsRequest(SleepSessionRecord::class, TimeRangeFilter.between(from, to)))
+            .records.map { SleepSession(it.startTime, it.endTime) }
     }
 }

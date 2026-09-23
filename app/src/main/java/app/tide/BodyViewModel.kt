@@ -2,6 +2,7 @@ package app.tide
 
 import app.tide.body.HealthReadings
 import app.tide.body.HealthSource
+import app.tide.core.notify.SleepInsightPolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 /**
@@ -72,17 +74,28 @@ class BodyViewModel(
             val to = Instant.ofEpochMilli(now())
             val from = to.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant()
             val readings = runCatching { source.read(from, to) }.getOrDefault(HealthReadings())
+            val recentAverage = runCatching { recentSleepAverage(from) }.getOrNull()
 
             _state.value = BodyUiState(
                 availability = availability,
                 granted = true,
                 steps = readings.steps?.let { it.toInt().grouped() },
-                sleep = readings.sleep?.let(::formatSleep),
+                sleep = readings.sleep?.let(SleepInsightPolicy::format),
+                sleepInsight = SleepInsightPolicy.body(readings.sleep, recentAverage),
                 heartRate = readings.restingHeartRateBpm?.let { "$it bpm" },
                 weight = readings.weightKg?.let { "${trim(it)} kg" },
                 weightAge = readings.weightAt?.let { age(it, to) },
             )
         }
+    }
+
+    /** The prior 7 nights, bucketed by the night each session ended. */
+    private suspend fun recentSleepAverage(beforeToday: Instant): Duration? {
+        val sessions = source.sleepSessions(beforeToday.minus(Duration.ofDays(7)), beforeToday)
+        val byNight: Map<LocalDate, Duration> = sessions
+            .groupBy { it.end.atZone(zone).toLocalDate() }
+            .mapValues { (_, night) -> night.fold(Duration.ZERO) { total, s -> total.plus(s.duration) } }
+        return SleepInsightPolicy.averageOf(byNight)
     }
 
     private fun age(at: Instant, now: Instant): String {
@@ -104,6 +117,8 @@ data class BodyUiState(
     /** Each null when Health Connect holds no reading for today. */
     val steps: String? = null,
     val sleep: String? = null,
+    /** Null without at least two recent nights to compare against, or no reading tonight. */
+    val sleepInsight: String? = null,
     val heartRate: String? = null,
     val weight: String? = null,
     val weightAge: String? = null,
@@ -112,12 +127,6 @@ data class BodyUiState(
 ) {
     val hasAnyReading: Boolean
         get() = steps != null || sleep != null || heartRate != null || weight != null
-}
-
-private fun formatSleep(duration: Duration): String {
-    val hours = duration.toHours()
-    val minutes = duration.toMinutes() % 60
-    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
 }
 
 private fun trim(v: Double): String =

@@ -14,6 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.time.LocalDate
 
 /**
  * Renders screens to PNG on the JVM, with no device and no emulator.
@@ -35,20 +36,25 @@ class TodayScreenshotTest {
     @get:Rule
     val compose = createComposeRule()
 
+    private val previewMonth = LocalDate.of(2026, 9, 1)
+
     private val sample = TodayUiState(
         dateLabel = "TUE 22 SEPTEMBER",
         headline = "No session\nyet today.",
         subline = "Last session was 2 days ago.",
         volumeLast7Days = "12 480 kg",
-        week = listOf(
-            TodayUiState.Day("M", trained = true, isToday = false),
-            TodayUiState.Day("T", trained = false, isToday = true),
-            TodayUiState.Day("W", trained = false, isToday = false),
-            TodayUiState.Day("T", trained = false, isToday = false),
-            TodayUiState.Day("F", trained = false, isToday = false),
-            TodayUiState.Day("S", trained = false, isToday = false),
-            TodayUiState.Day("S", trained = false, isToday = false),
-        ),
+        calendarMonth = List(1) {
+            TodayUiState.CalendarDay(null, "", trained = false, planned = false, moneyDue = false, isToday = false)
+        } + (1..30).map {
+            TodayUiState.CalendarDay(
+                date = previewMonth.withDayOfMonth(it),
+                label = it.toString(),
+                trained = it in listOf(14, 16, 18),
+                planned = it in listOf(14, 16, 18, 21, 23, 25),
+                moneyDue = it == 22,
+                isToday = it == 22,
+            )
+        },
         weekSummary = "1 SESSION",
     )
 
@@ -93,6 +99,24 @@ class TodayScreenshotTest {
             }
         }
         compose.onRoot().captureRoboImage("build/screenshots/session.png")
+    }
+
+    @Test
+    fun todayPlanned() {
+        compose.setContent {
+            TideTheme {
+                Box(Modifier.size(411.dp, 891.dp)) {
+                    TodayScreen(
+                        sample.copy(
+                            headline = "No session\nyet today.",
+                            subline = "Last session was 2 days ago.",
+                            planned = TodayUiState.Planned("Planned: Back squat, Bench press, Barbell row"),
+                        ),
+                    )
+                }
+            }
+        }
+        compose.onRoot().captureRoboImage("build/screenshots/today-planned.png")
     }
 
     @Test

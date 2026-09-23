@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.tide.body.HealthSource
@@ -165,6 +166,14 @@ fun BodyScreen(
                     Spacer(Modifier.height(8.dp))
                     Reading("Steps", state.steps)
                     Reading("Sleep", state.sleep)
+                    state.sleepInsight?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TideColors.TextMuted,
+                            modifier = Modifier.padding(bottom = 9.dp),
+                        )
+                    }
                     Reading("Lowest heart rate", state.heartRate)
                     Reading("Weight", state.weight, state.weightAge, divider = false)
                 }
@@ -198,37 +207,256 @@ private fun Reading(label: String, value: String?, age: String? = null, divider:
     }
 }
 
+/**
+ * Money: what renews, and when.
+ *
+ * No forecasting, no budget, no spending category. A subscription renews on
+ * its own whether this screen is ever opened, so there is nothing to mark
+ * done and nothing to miss, only a date to know about. The monthly figure is
+ * whatever actually falls inside the month being looked at, not every
+ * subscription's cost squeezed onto a common cadence it does not have.
+ */
 @Composable
-fun MoneyScreen(modifier: Modifier = Modifier) {
+fun MoneyScreen(
+    state: MoneyUiState,
+    onAdd: (name: String, amount: Double, cadence: Cadence, day: Int) -> Unit = { _, _, _, _ -> },
+    onRemove: (String) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    var adding by remember { mutableStateOf(false) }
+
     OceanBackground(modifier) {
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
         ) {
             Spacer(Modifier.height(20.dp))
             Text("MONEY", style = LabelStyle, color = TideColors.TextFaint)
             Spacer(Modifier.height(8.dp))
             Text(
-                "Not built.",
+                state.monthlyTotalLabel?.let { "$it\nthis month." } ?: "Nothing\nrenewing yet.",
                 style = MaterialTheme.typography.displayLarge,
                 color = TideColors.Text,
             )
             Spacer(Modifier.height(16.dp))
-            Scrim {
-                Text(
-                    "Commitments, renewals and a monthly figure, none of it written yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TideColors.TextMuted,
+
+            if (state.subscriptions.isEmpty() && !adding) {
+                Scrim {
+                    Text(
+                        "No subscriptions yet.",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TideColors.Text,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Add one below and it renews on its own from then on. Nothing here " +
+                            "is marked done or missed: a renewal is a date, not a commitment " +
+                            "you keep or fail.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TideColors.TextMuted,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            } else if (state.subscriptions.isNotEmpty()) {
+                state.subscriptions.forEach { sub ->
+                    SubscriptionRow(sub, onRemove = { onRemove(sub.id) })
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+
+            if (adding) {
+                Spacer(Modifier.height(4.dp))
+                AddSubscriptionForm(
+                    onCancel = { adding = false },
+                    onSubmit = { name, amount, cadence, day ->
+                        onAdd(name, amount, cadence, day)
+                        adding = false
+                    },
                 )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "The tab is here because the shape of the app is decided. The section " +
-                        "is empty because the work is not done, which is a better thing to " +
-                        "say than a screen of example subscriptions.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TideColors.TextFaint,
-                )
+            } else {
+                TideButton(onClick = { adding = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Add a subscription",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TideColors.OnAccent,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun SubscriptionRow(sub: MoneyUiState.Subscription, onRemove: () -> Unit) {
+    val shape = ContinuousCornerShape(20.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(TideColors.SurfaceRaised)
+            .border(1.dp, TideColors.Hairline, shape)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(sub.name, style = MaterialTheme.typography.bodyLarge, color = TideColors.Text)
+                Spacer(Modifier.height(2.dp))
+                Text("RENEWS ${sub.nextRenewalLabel}", style = LabelStyle, color = TideColors.TextFaint)
+            }
+            Text(sub.amountLabel, style = DataStyle, color = TideColors.Text)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row {
+            SmallAction("REMOVE", critical = true, onClick = onRemove)
+        }
+    }
+}
+
+@Composable
+private fun SmallAction(label: String, critical: Boolean = false, onClick: () -> Unit) {
+    val shape = ContinuousCornerShape(12.dp)
+    Box(
+        Modifier
+            .clip(shape)
+            .background(
+                if (critical) TideColors.Critical.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.05f),
+            )
+            .border(1.dp, TideColors.Hairline, shape)
+            .tidePress(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(label, style = LabelStyle, color = if (critical) TideColors.Critical else TideColors.TextMuted)
+    }
+}
+
+@Composable
+private fun AddSubscriptionForm(
+    onCancel: () -> Unit,
+    onSubmit: (name: String, amount: Double, cadence: Cadence, day: Int) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var amountText by remember { mutableStateOf("") }
+    var cadence by remember { mutableStateOf(Cadence.Monthly) }
+    var day by remember { mutableStateOf(1) }
+
+    Scrim {
+        Text("NAME", style = LabelStyle, color = TideColors.TextFaint)
+        Spacer(Modifier.height(6.dp))
+        PlainField(name, "Netflix, rent, gym", onValueChange = { name = it })
+
+        Spacer(Modifier.height(14.dp))
+        Text("AMOUNT", style = LabelStyle, color = TideColors.TextFaint)
+        Spacer(Modifier.height(6.dp))
+        PlainField(amountText, "0", onValueChange = { amountText = it }, keyboardType = KeyboardType.Decimal)
+
+        Spacer(Modifier.height(14.dp))
+        Text("HOW OFTEN", style = LabelStyle, color = TideColors.TextFaint)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Cadence.entries.forEach { c ->
+                CadenceChip(c.name.uppercase(), selected = cadence == c) {
+                    cadence = c
+                    // A day of month means nothing for a weekly cadence, and a
+                    // weekday means nothing for the other two: reset rather
+                    // than carry a number the new cadence would misread.
+                    day = if (c == Cadence.Weekly) 1 else 1
+                }
             }
         }
+
+        Spacer(Modifier.height(14.dp))
+        Text(
+            if (cadence == Cadence.Weekly) "WHICH DAY" else "WHICH DAY OF THE MONTH",
+            style = LabelStyle,
+            color = TideColors.TextFaint,
+        )
+        Spacer(Modifier.height(8.dp))
+        if (cadence == Cadence.Weekly) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                WEEKDAY_LABELS.forEachIndexed { i, label ->
+                    CadenceChip(label, selected = day == i + 1) { day = i + 1 }
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                SmallAction("-") { day = (day - 1).coerceIn(1, 31) }
+                Text("$day", style = DataStyle, color = TideColors.Text)
+                SmallAction("+") { day = (day + 1).coerceIn(1, 31) }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TideGhostButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                Text("Cancel", style = MaterialTheme.typography.labelLarge, color = TideColors.Text)
+            }
+            TideButton(
+                onClick = {
+                    val amount = amountText.toDoubleOrNull()
+                    if (name.isNotBlank() && amount != null && amount > 0.0) {
+                        onSubmit(name, amount, cadence, day)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Add", style = MaterialTheme.typography.labelLarge, color = TideColors.OnAccent)
+            }
+        }
+    }
+}
+
+private val WEEKDAY_LABELS = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+
+@Composable
+private fun CadenceChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val shape = ContinuousCornerShape(12.dp)
+    Box(
+        Modifier
+            .clip(shape)
+            .background(if (selected) TideColors.Accent.copy(alpha = 0.18f) else Color.Transparent)
+            .border(1.dp, if (selected) TideColors.Accent.copy(alpha = 0.55f) else TideColors.Hairline, shape)
+            .tidePress(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(label, style = LabelStyle, color = if (selected) TideColors.Accent else TideColors.TextMuted)
+    }
+}
+
+@Composable
+private fun PlainField(
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    keyboardType: KeyboardType = KeyboardType.Text,
+) {
+    val shape = ContinuousCornerShape(14.dp)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(Color.White.copy(alpha = 0.05f))
+            .border(1.dp, TideColors.Hairline, shape)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = TideColors.Text),
+            cursorBrush = SolidColor(TideColors.Accent),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { inner ->
+                if (value.isEmpty()) {
+                    Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = TideColors.TextFaint)
+                }
+                inner()
+            },
+        )
     }
 }
 

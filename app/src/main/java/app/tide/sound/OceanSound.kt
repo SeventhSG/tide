@@ -23,9 +23,11 @@ import kotlin.random.Random
  * in, and a little high noise on the crests for foam. It is pure arithmetic and
  * is tested as arithmetic.
  *
- * **Nothing here ever starts on its own.** There is no autoplay on launch, none
- * when a session starts, and none when a notification arrives. It plays when
- * someone presses play and stops when they leave.
+ * **Nothing in [OceanSoundPlayer] ever starts on its own.** There is no
+ * autoplay on launch, none when a session starts, and none when a
+ * notification arrives. It plays when someone presses play and stops when
+ * they leave. [BootSound] below is the one deliberate exception, playing
+ * once as the app opens, in step with [app.tide.core.design.BootWave].
  */
 class SurfGenerator(
     private val sampleRate: Int = 44_100,
@@ -162,6 +164,90 @@ class OceanSoundPlayer(context: Context) {
     fun somethingElseIsPlaying(): Boolean {
         val manager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         return manager?.isMusicActive == true && !running
+    }
+
+    private companion object {
+        const val SAMPLE_RATE = 44_100
+    }
+}
+
+/**
+ * One buffer, built once, for the boot wave to fill against.
+ *
+ * The same [SurfGenerator] arithmetic as the ambient sea, but its amplitude
+ * is shaped rather than held steady: it rises as the water fills the screen,
+ * and settles lower rather than cutting, matching [app.tide.core.design.BootWave]'s
+ * own rise-then-hold shape. A fill is a single arrival, not a loop, so it is
+ * built once into a fixed buffer rather than streamed.
+ */
+object BootSound {
+    fun buffer(
+        durationMs: Int = 1_400,
+        sampleRate: Int = 44_100,
+        peak: Float = 0.55f,
+    ): ShortArray {
+        val generator = SurfGenerator(sampleRate)
+        val total = sampleRate * durationMs / 1000
+        val out = ShortArray(total)
+        // 50ms chunks: coarse enough to be cheap, fine enough that the
+        // amplitude ramp is inaudible as steps rather than a smooth rise.
+        val chunkSamples = (sampleRate / 20).coerceAtLeast(1)
+        var written = 0
+        while (written < total) {
+            val n = minOf(chunkSamples, total - written)
+            val t = written.toFloat() / total
+            // Rises to the peak over the first 60 percent, the same fraction
+            // BootWave's water takes to fill the screen, then settles to
+            // half peak rather than an abrupt stop.
+            val amplitude = if (t < 0.6f) {
+                peak * (t / 0.6f)
+            } else {
+                peak * (1f - 0.5f * ((t - 0.6f) / 0.4f))
+            }
+            val chunk = ShortArray(n)
+            generator.fill(chunk, amplitude.coerceIn(0f, 1f))
+            chunk.copyInto(out, written)
+            written += n
+        }
+        return out
+    }
+}
+
+/**
+ * Plays [BootSound.buffer] once, then releases itself.
+ *
+ * `MODE_STATIC` rather than [OceanSoundPlayer]'s streaming thread: a boot fill
+ * has a fixed, known length, so there is nothing to keep feeding.
+ */
+class BootSoundPlayer {
+
+    fun play(durationMs: Int = 1_400) {
+        val samples = BootSound.buffer(durationMs)
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(SAMPLE_RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build(),
+            )
+            .setBufferSizeInBytes(samples.size * 2)
+            .setTransferMode(AudioTrack.MODE_STATIC)
+            .build()
+
+        track.write(samples, 0, samples.size)
+        track.setNotificationMarkerPosition(samples.size)
+        track.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+            override fun onMarkerReached(t: AudioTrack) = runCatching { t.release() }.let { Unit }
+            override fun onPeriodicNotification(t: AudioTrack) = Unit
+        })
+        track.play()
     }
 
     private companion object {

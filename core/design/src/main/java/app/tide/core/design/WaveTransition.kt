@@ -19,12 +19,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import kotlin.math.abs
 import kotlin.math.sin
@@ -33,15 +38,13 @@ import kotlin.math.sin
  * The transition between one part of the app and another.
  *
  * The app is called Tide, so a page hop is water moving rather than a card
- * sliding: the outgoing screen sinks and fades, the incoming one rises into
- * place, and a single crest of light crosses in the direction of travel. One
- * crest, not a wave machine, and it is finished in about a quarter of a second
- * because this is a door rather than a view.
- *
- * **Frequency still governs.** The crest is drawn only for a hop between the
- * app's main sections, a handful of times a session. Moving inside a section
- * gets the rise and fade alone, and under reduced motion both collapse to a
- * plain cut with no movement at all.
+ * sliding. For a hop between the app's main sections, a single crest of light
+ * sweeps top to bottom (bottom to top on the way back) and **the page changes
+ * as the crest crosses it**, not before and not after: the crest is what
+ * causes the change, rather than a decoration playing over a swap that
+ * already happened. Moving inside a section gets a plain, fast cross-fade
+ * with no crest, since that is the far more frequent hop and earns the
+ * lighter treatment. Under reduced motion both collapse to a plain cut.
  */
 @Composable
 fun <T> WaveTransition(
@@ -54,15 +57,17 @@ fun <T> WaveTransition(
     content: @Composable (T) -> Unit,
 ) {
     val reduce = rememberReducedMotion()
-    val shift = if (forward) 1 else -1
 
     Box(modifier) {
-        AnimatedContent(
-            targetState = target,
-            transitionSpec = {
-                if (reduce) {
-                    fadeIn(tween(0)) togetherWith fadeOut(tween(0))
-                } else {
+        if (crest && !reduce) {
+            WaveSwap(target, forward, content)
+        } else if (reduce) {
+            content(target)
+        } else {
+            val shift = if (forward) 1 else -1
+            AnimatedContent(
+                targetState = target,
+                transitionSpec = {
                     val enter = fadeIn(tween(Durations.CONTAINER_TRANSFORM, easing = Emphasized)) +
                         slideInVertically(
                             tween(Durations.CONTAINER_TRANSFORM, easing = Emphasized),
@@ -72,13 +77,44 @@ fun <T> WaveTransition(
                             tween(Durations.CONTAINER_TRANSFORM, easing = Emphasized),
                         ) { height -> -shift * height / 40 }
                     enter togetherWith exit
-                }
-            },
-            label = "screen",
-        ) { value -> content(value) }
-
-        if (crest && !reduce) Crest(target, forward)
+                },
+                label = "screen",
+            ) { value -> content(value) }
+        }
     }
+}
+
+/**
+ * One driving value, shared by the crest and the content it reveals.
+ *
+ * The animation runs to its midpoint, swaps which content is on screen and
+ * gives a single light haptic tick right there, then finishes the second
+ * half. The content itself never slides: the only thing that travels is the
+ * crest, and content dips in alpha as it is replaced rather than sliding past
+ * itself, so the swap reads as caused by the water crossing it.
+ */
+@Composable
+private fun <T> WaveSwap(target: T, forward: Boolean, content: @Composable (T) -> Unit) {
+    val haptics = LocalHapticFeedback.current
+    var visible by remember { mutableStateOf(target) }
+    val progress = remember(target) { Animatable(0f) }
+
+    LaunchedEffect(target) {
+        if (target == visible) return@LaunchedEffect
+        progress.snapTo(0f)
+        progress.animateTo(0.5f, tween(Durations.WAVE / 2, easing = LinearEasing))
+        visible = target
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        progress.animateTo(1f, tween(Durations.WAVE / 2, easing = LinearEasing))
+    }
+
+    val p = progress.value
+    // A dip rather than a slide: full opacity at both ends, lowest right at
+    // the midpoint where the content underneath actually changes.
+    val dip = sin(p * Math.PI.toFloat()) * 0.45f
+    Box(Modifier.fillMaxSize().alpha(1f - dip)) { content(visible) }
+
+    Crest(p, forward)
 }
 
 /**
@@ -86,19 +122,12 @@ fun <T> WaveTransition(
  *
  * Over the content rather than behind it, at a low alpha, so it reads as light
  * moving through water and not as a panel wiping across. It takes no touches:
- * it is gone before a thumb could reach anything.
+ * it is gone before a thumb could reach anything. [p] is shared with the
+ * content swap in [WaveSwap] rather than owning its own clock, which is what
+ * keeps the two in step.
  */
 @Composable
-private fun <T> Crest(target: T, forward: Boolean) {
-    val progress = remember(target) { Animatable(0f) }
-    LaunchedEffect(target) {
-        progress.snapTo(0f)
-        progress.animateTo(
-            1f,
-            tween(Durations.CONTAINER_TRANSFORM + 140, easing = LinearEasing),
-        )
-    }
-    val p = progress.value
+private fun Crest(p: Float, forward: Boolean) {
     if (p <= 0f || p >= 1f) return
 
     Canvas(Modifier.fillMaxSize()) {

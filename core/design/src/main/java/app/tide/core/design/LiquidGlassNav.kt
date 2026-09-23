@@ -97,13 +97,13 @@ fun LiquidGlassNav(
         val itemWidth: Dp = maxWidth / items.size
         val indicatorX by animateDpAsState(
             targetValue = itemWidth * selected,
-            animationSpec = if (reduce) {
-                spring(stiffness = Spring.StiffnessHigh, dampingRatio = 1f)
-            } else {
-                // Underdamped on purpose. The slight overshoot is what makes the
-                // highlight feel like it carries weight through the water.
-                spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow)
-            },
+            // Critically damped either way: the spring still gives the
+            // highlight weight as it settles, but it never overshoots and
+            // rebounds past the target.
+            animationSpec = spring(
+                dampingRatio = 1f,
+                stiffness = if (reduce) Spring.StiffnessHigh else Spring.StiffnessMediumLow,
+            ),
             label = "navIndicator",
         )
 

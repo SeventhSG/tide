@@ -55,6 +55,15 @@ class NotifyPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_SLEEP_GUARD_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_SLEEP_GUARD_ENABLED, value).apply()
 
+    /**
+     * Off by default, like every notification in this app. One sentence a
+     * day about last night against your own recent nights, real numbers,
+     * never generated.
+     */
+    var sleepInsightEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SLEEP_INSIGHT_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_SLEEP_INSIGHT_ENABLED, value).apply()
+
     /** The shape `:core:notify` decides with. */
     fun settings(): NotifySettings = NotifySettings(
         quietHours = QuietHours(
@@ -73,5 +82,6 @@ class NotifyPreferences(context: Context) {
         const val KEY_QUIET_START = "quiet.start"
         const val KEY_QUIET_END = "quiet.end"
         const val KEY_SLEEP_GUARD_ENABLED = "sleepguard.enabled"
+        const val KEY_SLEEP_INSIGHT_ENABLED = "sleepinsight.enabled"
     }
 }

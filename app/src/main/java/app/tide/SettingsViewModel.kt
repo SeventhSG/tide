@@ -32,6 +32,8 @@ class SettingsViewModel(
      * hours' start time moves, since that time is also bedtime.
      */
     private val onSleepGuardScheduleChanged: (enabled: Boolean, quietStart: LocalTime) -> Unit = { _, _ -> },
+    /** Called whenever the sleep insight's on/off state changes. */
+    private val onSleepInsightScheduleChanged: (enabled: Boolean) -> Unit = {},
     /** Null in tests, which have no audio device and must never make a sound. */
     private val sound: OceanSoundPlayer? = null,
     private val now: () -> Instant = Instant::now,
@@ -88,6 +90,13 @@ class SettingsViewModel(
     fun onToggleSleepGuard() {
         prefs.sleepGuardEnabled = !prefs.sleepGuardEnabled
         applySleepGuardSchedule()
+    }
+
+    /** One real sentence a day about last night. Off by default, like everything here. */
+    fun onToggleSleepInsight() {
+        prefs.sleepInsightEnabled = !prefs.sleepInsightEnabled
+        onSleepInsightScheduleChanged(prefs.sleepInsightEnabled)
+        render()
     }
 
     /**
@@ -175,6 +184,7 @@ class SettingsViewModel(
         soundPlaying = sound?.isPlaying == true,
         soundVolume = "${(soundVolume * 100).toInt()}%",
         sleepGuardEnabled = prefs.sleepGuardEnabled,
+        sleepInsightEnabled = prefs.sleepInsightEnabled,
     )
 
     private companion object {
@@ -195,4 +205,5 @@ data class SettingsUiState(
     val soundPlaying: Boolean = false,
     val soundVolume: String = "50%",
     val sleepGuardEnabled: Boolean = false,
+    val sleepInsightEnabled: Boolean = false,
 )

@@ -40,6 +40,14 @@ object Durations {
     /** Navigating into a module. Many times a day, so it stays brisk. */
     const val CONTAINER_TRANSFORM = 250
 
+    /**
+     * A hop between main sections, crest and content swap together. A
+     * handful of times a session, which is what earns it the longer of the
+     * two: it is the whole transition now, not a decoration riding on top
+     * of a faster one.
+     */
+    const val WAVE = 480
+
     /** Sheets and dialogs. Monthly, so it can breathe. */
     const val SHEET = 300
 

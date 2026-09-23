@@ -64,6 +64,7 @@ fun SettingsScreen(
     onSoundQuieter: () -> Unit = {},
     onSoundLouder: () -> Unit = {},
     onToggleSleepGuard: () -> Unit = {},
+    onToggleSleepInsight: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     OceanBackground(modifier, intensity = OceanIntensity.Subtle) {
@@ -178,6 +179,19 @@ fun SettingsScreen(
                         "direct alert if the phone is still on after it. The alert is the " +
                         "one thing here allowed to break quiet hours, because protecting " +
                         "them is the whole point of it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TideColors.TextMuted,
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Card {
+                Toggle("SLEEP INSIGHT", state.sleepInsightEnabled, onToggleSleepInsight)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "One sentence a day about last night against your own last 7 nights, " +
+                        "read straight from Health Connect. Real numbers, not a generated " +
+                        "guess: nothing here is a model, on the phone or off it.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TideColors.TextMuted,
                 )
@@ -335,6 +349,7 @@ private fun SettingsPreview() {
                 quietEnd = "07:00",
                 permissionGranted = false,
                 sleepGuardEnabled = true,
+                sleepInsightEnabled = false,
             ),
         )
     }

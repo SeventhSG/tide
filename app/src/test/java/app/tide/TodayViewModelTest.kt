@@ -66,6 +66,7 @@ class TodayViewModelTest {
             state = db.exerciseState(),
             bodyWeight = db.bodyWeight(),
             now = { clock },
+            zone = zone,
         )
         db.exercises().upsert(squat)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -95,15 +96,18 @@ class TodayViewModelTest {
     @Test
     fun `an empty database shows no numbers at all`() {
         start()
-        val state = awaitState { it.week.isNotEmpty() }
+        val state = awaitState { it.calendarMonth.isNotEmpty() }
 
         assertEquals("WED 24 SEPTEMBER", state.dateLabel)
         assertEquals("No session\nyet today.", state.headline)
         assertEquals("Nothing logged yet. The first session starts the history.", state.subline)
         assertNull("zero volume is not a reading, so there is no row", state.volumeLast7Days)
         assertEquals("NONE YET", state.weekSummary)
-        assertTrue("nothing trained, so no day is filled", state.week.none { it.trained })
-        assertEquals("today is Wednesday, the third square", 2, state.week.indexOfFirst { it.isToday })
+        assertTrue("nothing trained, so no day is filled", state.calendarMonth.none { it.trained })
+        assertTrue(
+            "today is on the grid, marked as today",
+            state.calendarMonth.any { it.isToday && it.date == LocalDate.of(2025, 9, 24) },
+        )
     }
 
     @Test
@@ -123,7 +127,7 @@ class TodayViewModelTest {
         // 3 x 100 x 5, and the 40 kg warm-up is excluded in SQL.
         assertEquals("1 500 kg", state.volumeLast7Days)
         assertEquals("1 SESSION", state.weekSummary)
-        assertTrue(state.week[2].trained)
+        assertTrue(state.calendarMonth.first { it.isToday }.trained)
     }
 
     @Test
@@ -156,5 +160,91 @@ class TodayViewModelTest {
         assertEquals("Last session was 9 days ago.", state.subline)
         assertNull("the 7 day window has passed over it", state.volumeLast7Days)
         assertEquals("NONE YET", state.weekSummary)
+    }
+
+    @Test
+    fun `today's plan is shown before anything is logged`() {
+        runBlocking { repo.addToPlan(2, squat.id) } // Wednesday, today
+
+        start()
+        val state = awaitState { it.planned != null }
+
+        assertEquals("Planned: Back squat", state.planned!!.line)
+    }
+
+    @Test
+    fun `the planned line is gone once a session is open`() {
+        runBlocking {
+            repo.addToPlan(2, squat.id)
+            repo.startSession()
+        }
+
+        start()
+        val state = awaitState { it.resuming }
+
+        assertNull("a session is already open, so the plan has done its job", state.planned)
+    }
+
+    @Test
+    fun `the planned line is gone once something is logged today`() {
+        runBlocking {
+            repo.addToPlan(2, squat.id)
+            val s = repo.startSession()
+            repeat(3) { repo.logSet(s, squat.id, loadKg = 100.0, reps = 5) }
+            repo.finishSession(s, ProgressionRule.Linear(2.5))
+        }
+
+        start()
+        val state = awaitState { it.volumeLast7Days != null }
+
+        assertNull("something was already logged today, so repeating the plan would be noise", state.planned)
+    }
+
+    @Test
+    fun `nothing planned shows no line, invented or otherwise`() {
+        start()
+        val state = awaitState { it.calendarMonth.isNotEmpty() }
+        assertNull(state.planned)
+    }
+
+    @Test
+    fun `with no MoneyRepository, nothing is ever marked as a renewal`() {
+        start()
+        val state = awaitState { it.calendarMonth.isNotEmpty() }
+        assertTrue(
+            "no MoneyRepository was given, so nothing can be marked due",
+            state.calendarMonth.none { it.moneyDue },
+        )
+    }
+
+    @Test
+    fun `a subscription renewing this month marks its day on the calendar`() = runBlocking {
+        val money = app.tide.core.data.money.MoneyRepository(db.subscriptions(), now = { clock })
+        money.add(
+            "Gym", 45.0,
+            app.tide.core.schedule.Recurrence.MonthlyByDay(28),
+            LocalDate.of(2025, 9, 1),
+        )
+
+        vm = TodayViewModel(repo, scope, money, now = { clock }, zone = zone)
+        val state = awaitState { it.calendarMonth.any { d -> d.moneyDue } }
+
+        val marked = state.calendarMonth.single { it.moneyDue }
+        assertEquals(LocalDate.of(2025, 9, 28), marked.date)
+    }
+
+    @Test
+    fun `a fixed plan marks its weekday across the whole month`() = runBlocking {
+        repo.addToPlan(2, squat.id) // Wednesday
+
+        start()
+        val state = awaitState { it.calendarMonth.isNotEmpty() }
+        val wednesdays = state.calendarMonth.filter { it.date?.dayOfWeek == java.time.DayOfWeek.WEDNESDAY }
+        assertTrue(wednesdays.isNotEmpty())
+        assertTrue("every Wednesday in the month is marked planned", wednesdays.all { it.planned })
+        val notWednesday = state.calendarMonth.filter {
+            it.date != null && it.date.dayOfWeek != java.time.DayOfWeek.WEDNESDAY
+        }
+        assertTrue("no other weekday is marked planned", notWednesday.none { it.planned })
     }
 }

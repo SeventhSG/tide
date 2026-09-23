@@ -10,7 +10,7 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 13 MB, minSdk 26, targetSdk 35 |
-| Tests | 311 green, including 30 schedule and reconciler, 32 notify, and 3 on the migrations |
+| Tests | 330 green, including 30 schedule and reconciler, 32 notify, and 5 on the migrations |
 | Screens rendering | Today, Train, Body, Money, Ask, logger, picker, planner, history, settings |
 | Screens wired to data | Today, Train, Body, Ask, logger, picker, planner, history, import, muscle map |
 
@@ -230,6 +230,65 @@ declares both the legacy rationale intent-filter and Android 14's `VIEW_PERMISSI
 matching Google's own reference sample exactly, and a failed launch now says so on screen
 instead of vanishing.
 
+**The week planner, corrected.** This entry used to read as still missing, and it was half
+wrong: the fixed-day planner (`PlannerScreen`, moving exercises between days, writing itself
+out as a schedule rule) shipped in v0.1.1. What was actually still true is fixed now too.
+
+**A rotation is the other shape a plan can take.** Push, then pull, then legs, in order, on
+whichever days you get to the gym, named and reordered rather than pinned to a weekday. A
+routine is one or the other; switching clears the plan rather than guessing that Monday meant
+the first slot, because `dayIndex` means a different thing in each and there is nothing honest
+to carry across. Rotation writes a `TimesPerWeek` quota to the schedule instead of `Weekly`,
+which is the rule shape that stops the app saying you missed Monday when you trained Tuesday.
+
+**Neither shape did anything when you actually trained, and now both do.** Starting a session
+used to always start a freestyle one. It now reaches for today's plan itself first, today's
+weekday in Fixed, the slot after wherever the rotation last left off in Rotation, so a
+finished session is tagged with the day it was really for. The picker puts what is planned on
+top, above Recent. Today says one honest line about it, and only while there is still
+something to say: once something is open or already logged, the plan has done its job.
+
+**v0.2.0, the wave causes the change, Money exists, and Today shows everything on one
+calendar.** Five pieces, reviewed together.
+
+The page transition used to be two things running at once: the crest, and `AnimatedContent`'s
+own fade and slide, timed independently, so the new screen was already there while the crest
+was still crossing it. `WaveTransition` now drives both off one clock: the crest sweeps, the
+outgoing screen dips in a matching sine curve, and the swap happens exactly as the crest
+crosses the middle, with a single light haptic tick at that instant. The nav's selected-tab
+spring stopped overshooting its target: still a spring, still weighted, `dampingRatio` moved
+to 1 either way rather than the deliberate 0.62 undamped, since the overshoot itself was the
+part that had to go. The boot wave gained a sound: a short generated fill, the same
+brown-noise-and-swell arithmetic as the ocean player, ramped rather than looped, and the one
+deliberate exception to "nothing in this app plays audio on its own."
+
+**Money is a real module now**, not the placeholder that said so. A subscription is a name,
+an amount and a cadence (monthly, yearly or weekly, the three shapes `Recurrence` already
+has), and it renews on `Schedule.expand` directly rather than through the reconciler: a
+renewal is not evidence-based like a training session, it happens whether the app is open or
+not, and running it through `Reconciler` would have called every unwatched renewal `Missed`,
+which is not what it is. The daily digest gained a second source alongside training's
+outstanding occurrences, a subscription renewing today, still one message a day.
+
+**Today's week strip became a month calendar**, training, the plan and money renewals on one
+grid rather than three separate places to look. A filled square is a day actually trained, a
+hairline ring is a day the (Fixed) plan calls for, a small dot is a renewal; a square can
+carry more than one. Rotation plans mark nothing on days other than today, since a rotation
+slot has no weekday and painting a guess across the month would be inventing a plan it never
+made.
+
+**Body says one real sentence about last night**, against your own last 7 nights, read
+straight from Health Connect through a new `HealthSource.sleepSessions` that hands back
+individual sessions rather than one summed figure, so a night with no sync is excluded from
+the average rather than counted as a zero that would understate it. `SleepInsightPolicy`,
+pure and shared between the screen and a new opt-in daily notification, does the arithmetic
+and the wording; there is no model behind it, on-device or otherwise, which is the honest
+answer until there is a phone to load one on.
+
+**Exercise images stay out.** hasaneyldrm/exercises-dataset's own `NOTICE.md` still records
+its media as licensed to that one repository and nothing further, which is the same answer
+three earlier sources gave. The drawn marks stay.
+
 ## Next
 
 ### Before the next release
@@ -264,25 +323,6 @@ the third:
   true whenever a source finally does clear the check.
 
 Until one does, every exercise keeps the drawn mark this app makes itself.
-
-### A weekly planner
-
-Decide which day is which: Monday is push, Wednesday is pull, Friday is legs, the rest are rest.
-Then Today knows what is planned, starting a session opens that day's exercises, and the
-hardcoded squat disappears on its own.
-
-Half of this exists already. `RoutineEntity` and `RoutineExerciseEntity` are in the schema with
-a `dayIndex` per exercise, and have been since version 1. What is missing is every screen.
-
-Two shapes of plan, because people train both ways:
-
-- **Fixed days.** Push on Monday, whatever happens. A `Weekly` rule in `:core:schedule`.
-- **A rotation.** Push, pull, legs, in order, three times a week, on whichever days you get to
-  the gym. A `TimesPerWeek` quota. Most schedulers cannot express this, and it is the one that
-  stops the app telling you that you missed Monday when you train Tuesday.
-
-A plan becomes schedule rules, so the reconciler resolves each day from the logged session
-without asking. Moving a day never reorders the week.
 
 ### Also waiting
 

@@ -6,6 +6,8 @@ import app.tide.ask.ModelInstaller
 import app.tide.ask.ModelSpec
 import app.tide.body.HealthReadings
 import app.tide.body.HealthSource
+import app.tide.body.SleepSession
+import app.tide.sound.BootSound
 import app.tide.sound.SurfGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,10 +62,12 @@ class BodyAskSoundTest {
         private val availability: HealthSource.Availability = HealthSource.Availability.Available,
         private val granted: Boolean = true,
         private val readings: HealthReadings = HealthReadings(),
+        private val sessions: List<SleepSession> = emptyList(),
     ) : HealthSource {
         override suspend fun availability() = availability
         override suspend fun hasPermissions() = granted
         override suspend fun read(from: Instant, to: Instant) = readings
+        override suspend fun sleepSessions(from: Instant, to: Instant) = sessions
     }
 
     private val noon = Instant.parse("2026-09-23T12:00:00Z").toEpochMilli()
@@ -122,6 +126,7 @@ class BodyAskSoundTest {
             override suspend fun availability() = throw IllegalStateException("provider is updating")
             override suspend fun hasPermissions() = throw IllegalStateException()
             override suspend fun read(from: Instant, to: Instant) = throw IllegalStateException()
+            override suspend fun sleepSessions(from: Instant, to: Instant) = throw IllegalStateException()
         }
         val state = body(exploding).state.value
         assertEquals(HealthSource.Availability.NotSupported, state.availability)
@@ -137,6 +142,55 @@ class BodyAskSoundTest {
             "Health Connect did not open. It may need updating from the Play Store.",
             vm.state.value.error,
         )
+    }
+
+    @Test
+    fun `one night of history is not enough to say anything`() {
+        val state = body(
+            FakeHealth(
+                readings = HealthReadings(sleep = Duration.ofHours(6)),
+                sessions = listOf(
+                    SleepSession(
+                        Instant.parse("2026-09-22T23:00:00Z"),
+                        Instant.parse("2026-09-23T05:00:00Z"),
+                    ),
+                ),
+            ),
+        ).state.value
+        assertNull("one point is not a pattern to compare against", state.sleepInsight)
+    }
+
+    @Test
+    fun `sleeping well under the recent average says so, plainly`() {
+        val sessions = (2..8).map { daysAgo ->
+            SleepSession(
+                Instant.parse("2026-09-23T00:00:00Z").minus(Duration.ofDays(daysAgo.toLong())),
+                Instant.parse("2026-09-23T00:00:00Z").minus(Duration.ofDays(daysAgo.toLong())).plus(Duration.ofHours(8)),
+            )
+        }
+        val state = body(
+            FakeHealth(
+                readings = HealthReadings(sleep = Duration.ofHours(4)),
+                sessions = sessions,
+            ),
+        ).state.value
+
+        assertEquals(
+            "Slept 4h 0m, well under your last 7 nights (8h 0m). Worth an earlier night.",
+            state.sleepInsight,
+        )
+    }
+
+    @Test
+    fun `no reading tonight says nothing about tonight`() {
+        val sessions = (2..8).map { daysAgo ->
+            SleepSession(
+                Instant.parse("2026-09-23T00:00:00Z").minus(Duration.ofDays(daysAgo.toLong())),
+                Instant.parse("2026-09-23T00:00:00Z").minus(Duration.ofDays(daysAgo.toLong())).plus(Duration.ofHours(8)),
+            )
+        }
+        val state = body(FakeHealth(readings = HealthReadings(sleep = null), sessions = sessions)).state.value
+        assertNull(state.sleepInsight)
     }
 
     @Test
@@ -263,5 +317,28 @@ class BodyAskSoundTest {
 
         val identical = first.zip(later.toList()).count { it.first == it.second }
         assertTrue("a looping buffer would match everywhere", identical < first.size / 4)
+    }
+
+    // --- The boot fill ------------------------------------------------------
+
+    @Test
+    fun `the boot fill is the requested length`() {
+        val samples = BootSound.buffer(durationMs = 1_000, sampleRate = 8_000)
+        assertEquals(8_000, samples.size)
+    }
+
+    @Test
+    fun `the boot fill rises rather than starting at full volume`() {
+        val samples = BootSound.buffer(durationMs = 1_000, sampleRate = 8_000, peak = 0.8f)
+        val start = samples.take(80).maxOf { kotlin.math.abs(it.toInt()) }
+        val middle = samples.drop(4_400).take(80).maxOf { kotlin.math.abs(it.toInt()) }
+        assertTrue("the opening must be quieter than the rise to peak", start < middle)
+    }
+
+    @Test
+    fun `the boot fill settles rather than cutting off`() {
+        val samples = BootSound.buffer(durationMs = 1_000, sampleRate = 8_000, peak = 0.8f)
+        val end = samples.takeLast(80).maxOf { kotlin.math.abs(it.toInt()) }
+        assertTrue("the tail must not be silent", end > 0)
     }
 }
