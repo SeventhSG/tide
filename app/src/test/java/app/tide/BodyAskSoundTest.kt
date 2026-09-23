@@ -127,6 +127,32 @@ class BodyAskSoundTest {
         assertEquals(HealthSource.Availability.NotSupported, state.availability)
     }
 
+    @Test
+    fun `a failed launch is said plainly, not silently`() {
+        val vm = body(FakeHealth(granted = false))
+        assertEquals(null, vm.state.value.error)
+
+        vm.onConnectFailed()
+        assertEquals(
+            "Health Connect did not open. It may need updating from the Play Store.",
+            vm.state.value.error,
+        )
+    }
+
+    @Test
+    fun `a successful refresh clears a stale failed-launch error`() {
+        val vm = body(FakeHealth(granted = false))
+        vm.onConnectFailed()
+        assertTrue(vm.state.value.error != null)
+
+        vm.refresh()
+        assertEquals(
+            "the error was about opening the screen, not about the state it left behind",
+            null,
+            vm.state.value.error,
+        )
+    }
+
     // --- Ask, and the download --------------------------------------------
 
     private class FakeConnection(

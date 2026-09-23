@@ -46,6 +46,7 @@ fun OnboardingScreen(
     notificationsGranted: Boolean,
     healthConnectAvailable: Boolean,
     healthConnectGranted: Boolean,
+    healthConnectError: String? = null,
     onRequestNotifications: () -> Unit = {},
     onRequestHealthConnect: () -> Unit = {},
     onContinue: () -> Unit = {},
@@ -131,6 +132,10 @@ fun OnboardingScreen(
                                 style = MaterialTheme.typography.labelLarge,
                                 color = TideColors.Text,
                             )
+                        }
+                        healthConnectError?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(it, style = MaterialTheme.typography.bodyMedium, color = TideColors.Warning)
                         }
                     }
                 }

@@ -18,7 +18,7 @@ Training that decides what you lift today. Body, read from your own watch. No ac
 [![Top language](https://img.shields.io/github/languages/top/SeventhSG/tide?style=flat-square&color=2ED3B0&labelColor=0B1D25)](https://github.com/SeventhSG/tide)
 [![Stars](https://img.shields.io/github/stars/SeventhSG/tide?style=flat-square&color=2ED3B0&labelColor=0B1D25)](https://github.com/SeventhSG/tide/stargazers)
 
-**306 tests green · minSdk 26 · Kotlin, Compose, Room · nothing in here phones home**
+**311 tests green · minSdk 26 · Kotlin, Compose, Room · nothing in here phones home**
 
 </div>
 
@@ -26,7 +26,7 @@ Training that decides what you lift today. Body, read from your own watch. No ac
 
 ## Where it stands
 
-**v0.1.3.** Training is real and usable: log a session, finish it, and the progression engine
+**v0.1.4.** Training is real and usable: log a session, finish it, and the progression engine
 decides next week's numbers, over a **1,311-exercise library** rather than a starter set.
 Around it there is a week planner, a history calendar, a muscle map, importers, a quiet daily
 summary with a sleep guard, a first-run onboarding screen, and a Body section reading Health
@@ -39,7 +39,7 @@ gap, stated here rather than discovered on install.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 13 MB, minSdk 26, targetSdk 35 |
-| Tests | 306 green: progression, schedule, notify, importers, migrations, every viewmodel |
+| Tests | 311 green: progression, schedule, notify, importers, migrations, every viewmodel |
 | Sections | Today, Train, Body, Money (empty on purpose), Ask |
 | Not yet | Real generation in Ask, Money, retroactive logging, a licensed image library |
 

@@ -139,6 +139,10 @@ fun BodyScreen(
                             color = TideColors.OnAccent,
                         )
                     }
+                    state.error?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = TideColors.Warning)
+                    }
                 }
 
                 !state.hasAnyReading -> Scrim {

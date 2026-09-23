@@ -37,6 +37,19 @@ class BodyViewModel(
         refresh()
     }
 
+    /**
+     * Called when actually launching the permission screen throws, which is
+     * different from the screen opening and permission being denied: that
+     * case already shows correctly as `granted = false`. This is for when
+     * nothing opened at all, so pressing the button stops looking like it
+     * did nothing.
+     */
+    fun onConnectFailed() {
+        _state.value = _state.value.copy(
+            error = "Health Connect did not open. It may need updating from the Play Store.",
+        )
+    }
+
     fun refresh() {
         scope.launch {
             // Every call here can throw: the provider can be mid-update, or the
@@ -94,6 +107,8 @@ data class BodyUiState(
     val heartRate: String? = null,
     val weight: String? = null,
     val weightAge: String? = null,
+    /** Set only when launching the permission screen itself failed to open. */
+    val error: String? = null,
 ) {
     val hasAnyReading: Boolean
         get() = steps != null || sleep != null || heartRate != null || weight != null

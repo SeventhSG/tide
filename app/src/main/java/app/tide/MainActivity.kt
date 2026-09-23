@@ -255,6 +255,7 @@ private fun WiredOnboardingScreen(onDone: () -> Unit) {
     var notificationsGranted by remember { mutableStateOf(notifier.canPost()) }
     var healthAvailable by remember { mutableStateOf(false) }
     var healthGranted by remember { mutableStateOf(false) }
+    var healthError by remember { mutableStateOf<String?>(null) }
 
     suspend fun refreshHealth() {
         healthAvailable = healthSource.availability() == HealthSource.Availability.Available
@@ -274,6 +275,7 @@ private fun WiredOnboardingScreen(onDone: () -> Unit) {
         notificationsGranted = notificationsGranted,
         healthConnectAvailable = healthAvailable,
         healthConnectGranted = healthGranted,
+        healthConnectError = healthError,
         onRequestNotifications = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -282,7 +284,11 @@ private fun WiredOnboardingScreen(onDone: () -> Unit) {
             }
         },
         onRequestHealthConnect = {
+            healthError = null
             runCatching { healthPermission.launch(HealthSource.PERMISSIONS) }
+                .onFailure {
+                    healthError = "Health Connect did not open. It may need updating from the Play Store."
+                }
         },
         onContinue = {
             OnboardingPreferences(context.applicationContext).completed = true
@@ -400,7 +406,14 @@ private fun WiredBodyScreen() {
 
     BodyScreen(
         state = uiState,
-        onConnect = { runCatching { permissions.launch(HealthSource.PERMISSIONS) } },
+        onConnect = {
+            // A missing rationale activity or a stale Health Connect install
+            // can make this throw before anything ever opens. That used to
+            // be swallowed here, which is exactly what "the button does
+            // nothing" looks like from the other side of the screen.
+            runCatching { permissions.launch(HealthSource.PERMISSIONS) }
+                .onFailure { viewModel.onConnectFailed() }
+        },
         onOpenHealthConnect = {
             // The provider lives in the Play Store on most devices, and this is
             // the intent Google documents for sending someone to get it.

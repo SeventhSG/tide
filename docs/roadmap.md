@@ -10,7 +10,7 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 13 MB, minSdk 26, targetSdk 35 |
-| Tests | 306 green, including 30 schedule and reconciler, 32 notify, and 3 on the migrations |
+| Tests | 311 green, including 30 schedule and reconciler, 32 notify, and 3 on the migrations |
 | Screens rendering | Today, Train, Body, Money, Ask, logger, picker, planner, history, settings |
 | Screens wired to data | Today, Train, Body, Ask, logger, picker, planner, history, import, muscle map |
 
@@ -217,6 +217,18 @@ either; every project doing this vendors its C++ source and hand rolls the JNI b
 Attempting that blind, with no device or emulator to load the result on, is how a native
 library ends up crashing on the first phone that finally runs it, so `InferenceEngine` is a
 real seam with nothing plugged into it yet, and the screen says so instead of guessing.
+
+**v0.1.4, Connect Health Connect, actually connecting.** The v0.1.2 fix declared the four
+`android.permission.health.*` permissions but missed a second, separate requirement: Health
+Connect's own permission screen links out to a "why does this app want this" rationale, and
+sends that tap to an activity the requesting app has to declare. Tide had none, and had
+declared the rationale action as something it queries for rather than something it handles,
+which is the opposite of what was needed. Some Health Connect versions refuse to show the
+permission screen at all without it, which reads as the button doing nothing rather than as an
+error, because it was: the failure was being caught and silently discarded. `MainActivity` now
+declares both the legacy rationale intent-filter and Android 14's `VIEW_PERMISSION_USAGE` one,
+matching Google's own reference sample exactly, and a failed launch now says so on screen
+instead of vanishing.
 
 ## Next
 
