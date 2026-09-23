@@ -32,6 +32,15 @@ class SessionViewModel(
     private val repository: TrainingRepository,
     private val scope: CoroutineScope,
     private val defaultRule: ProgressionRule = ProgressionRule.Linear(),
+    /**
+     * A session left open past a couple of hours is worth a check, in case
+     * Finish was never pressed. Called once the session is confirmed open,
+     * including on every resume, so it is idempotent by (sessionId, startedAt)
+     * rather than something to schedule only once.
+     */
+    private val onSessionOpen: (sessionId: String, startedAt: Long) -> Unit = { _, _ -> },
+    /** Called once finishing actually completes, to cancel that check. */
+    private val onSessionClosed: (sessionId: String) -> Unit = {},
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val _state = MutableStateFlow(EMPTY_STATE)
@@ -76,6 +85,7 @@ class SessionViewModel(
             val id = repository.startSession()
             sessionId = id
             startedAt = repository.observeActiveSession().first()?.startedAt ?: now()
+            onSessionOpen(id, startedAt)
             render()
 
             repository.observeSets(id).collect { sets ->
@@ -165,6 +175,7 @@ class SessionViewModel(
         val anySets = sessionSets.isNotEmpty()
         scope.launch {
             val decisions = repository.finishSession(id, defaultRule)
+            onSessionClosed(id)
             summary = SessionSummary(
                 duration = formatDuration(endedAt - startedAt),
                 workingSets = workingSets,

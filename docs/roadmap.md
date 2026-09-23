@@ -10,7 +10,7 @@ planned. Where the two diverged, the divergence is written down with the reason.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 13 MB, minSdk 26, targetSdk 35 |
-| Tests | 293 green, including 30 schedule and reconciler, 32 notify, and 3 on the migrations |
+| Tests | 306 green, including 30 schedule and reconciler, 32 notify, and 3 on the migrations |
 | Screens rendering | Today, Train, Body, Money, Ask, logger, picker, planner, history, settings |
 | Screens wired to data | Today, Train, Body, Ask, logger, picker, planner, history, import, muscle map |
 
@@ -193,6 +193,31 @@ itself does not move there; motion belongs to the door, not the room.
 The panel is asked for at 120Hz where the display has it, since Compose's animations already
 run off the choreographer rather than a fixed step and had nothing stopping them using it.
 
+**v0.1.3, onboarding, a session left open, and Ask that actually answers something.** A first
+run screen asks for notifications and Health Connect together, once, before Today, rather than
+scattered across the first few sessions; both stay skippable and granting one opts into
+nothing else, since the daily summary still waits for its own switch in Settings. A session
+schedules a check two hours after it opens, anchored to when it actually started rather than
+to when the app was last looked at: if it is still the same session and still open, one
+notification asks whether training is still going, through the same funnel and the same tiers
+as everything else. Every logged set was already safe on disk regardless, so this is about a
+forgotten Finish, not about data at risk.
+
+**Ask can answer real questions now, with no model at all.** `TrainingTools` is the SQL-backed
+tool layer the assistant's plan always called for first: sessions this week, seven day volume,
+the most worked muscle, or the last time a named lift was trained, each one a sentence read
+straight out of the database and provable by moving data rather than by asking a model
+anything. Ask's chat routes a message to one of these by keyword and says plainly when it
+cannot, rather than guessing. **Real generation is still not wired**, and after actually
+checking rather than assuming: MediaPipe's own LLM Inference library is real, but every
+model file capable enough to be worth running is Google's Gemma, gated behind a Hugging Face
+account that has accepted its licence, confirmed by querying Hugging Face and Google's model
+bucket directly rather than by guessing a URL. llama.cpp has no published Android library
+either; every project doing this vendors its C++ source and hand rolls the JNI bridge.
+Attempting that blind, with no device or emulator to load the result on, is how a native
+library ends up crashing on the first phone that finally runs it, so `InferenceEngine` is a
+real seam with nothing plugged into it yet, and the screen says so instead of guessing.
+
 ## Next
 
 ### Before the next release
@@ -205,6 +230,10 @@ it says", and four things made that untrue. These come first, before anything ne
 3. ~~**Today shows real numbers or none.**~~ Done, see above.
 4. **Launched once on a real phone.** Nothing has ever started `MainActivity`. Roborazzi
    renders screens, it does not prove the app opens. This step needs a person and a USB cable.
+5. **A real inference engine.** The tool layer and the chat surface are built and tested; the
+   model that would phrase their answers into a conversation is not. Whichever path is chosen,
+   native build or a gated model download, it needs a device to load the result on before it
+   ships, which is exactly what this machine does not have.
 
 ### The exercise library's images, still
 

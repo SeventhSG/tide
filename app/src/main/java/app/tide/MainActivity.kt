@@ -33,9 +33,12 @@ import app.tide.core.design.WaveTransition
 import app.tide.notify.DigestWorker
 import app.tide.notify.NotifyPreferences
 import app.tide.notify.PlanSchedule
+import app.tide.notify.SessionWatchdogWorker
 import app.tide.notify.SleepGuardWorker
+import app.tide.onboarding.OnboardingPreferences
 import app.tide.sound.OceanSoundPlayer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -102,6 +105,14 @@ class MainActivity : ComponentActivity() {
                 // animation was playing, just never visible.
                 if (!booted) {
                     BootWave(Modifier.fillMaxSize()) { booted = true }
+                    return@TideTheme
+                }
+
+                var onboarded by remember {
+                    mutableStateOf(OnboardingPreferences(applicationContext).completed)
+                }
+                if (!onboarded) {
+                    WiredOnboardingScreen(onDone = { onboarded = true })
                     return@TideTheme
                 }
 
@@ -217,7 +228,7 @@ class MainActivity : ComponentActivity() {
 
                 Section.Money -> MoneyScreen()
 
-                Section.Ask -> WiredAskScreen()
+                Section.Ask -> WiredAskScreen(repository = remember { Tide.training(applicationContext) })
             }
         }
     }
@@ -232,6 +243,52 @@ class MainActivity : ComponentActivity() {
  */
 private object PlanHolder {
     var pendingAdd: String? = null
+}
+
+@Composable
+private fun WiredOnboardingScreen(onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val notifier = remember { Tide.notifier(context.applicationContext) }
+    val healthSource = remember { AndroidHealthSource(context) }
+
+    var notificationsGranted by remember { mutableStateOf(notifier.canPost()) }
+    var healthAvailable by remember { mutableStateOf(false) }
+    var healthGranted by remember { mutableStateOf(false) }
+
+    suspend fun refreshHealth() {
+        healthAvailable = healthSource.availability() == HealthSource.Availability.Available
+        healthGranted = healthAvailable && healthSource.hasPermissions()
+    }
+    LaunchedEffect(Unit) { refreshHealth() }
+
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { notificationsGranted = notifier.canPost() }
+
+    val healthPermission = rememberLauncherForActivityResult(
+        androidx.health.connect.client.PermissionController.createRequestPermissionResultContract(),
+    ) { scope.launch { refreshHealth() } }
+
+    OnboardingScreen(
+        notificationsGranted = notificationsGranted,
+        healthConnectAvailable = healthAvailable,
+        healthConnectGranted = healthGranted,
+        onRequestNotifications = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                notificationsGranted = notifier.canPost()
+            }
+        },
+        onRequestHealthConnect = {
+            runCatching { healthPermission.launch(HealthSource.PERMISSIONS) }
+        },
+        onContinue = {
+            OnboardingPreferences(context.applicationContext).completed = true
+            onDone()
+        },
+    )
 }
 
 @Composable
@@ -362,10 +419,12 @@ private fun WiredBodyScreen() {
 }
 
 @Composable
-private fun WiredAskScreen() {
+private fun WiredAskScreen(repository: TrainingRepository) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val viewModel = remember { AskViewModel(ModelInstaller(context.applicationContext), scope) }
+    val viewModel = remember {
+        AskViewModel(ModelInstaller(context.applicationContext), scope, repository = repository)
+    }
     val uiState by viewModel.state.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -375,6 +434,7 @@ private fun WiredAskScreen() {
         onInstall = viewModel::onInstall,
         onCancel = viewModel::onCancel,
         onRemove = viewModel::onRemove,
+        onSend = viewModel::onSend,
     )
 }
 
@@ -386,7 +446,18 @@ private fun WiredSessionScreen(
     onFinished: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val viewModel = remember(exerciseId) { SessionViewModel(exerciseId, repository, scope) }
+    val context = LocalContext.current
+    val viewModel = remember(exerciseId) {
+        SessionViewModel(
+            exerciseId, repository, scope,
+            onSessionOpen = { sessionId, startedAt ->
+                SessionWatchdogWorker.schedule(context.applicationContext, sessionId, startedAt)
+            },
+            onSessionClosed = { sessionId ->
+                SessionWatchdogWorker.cancel(context.applicationContext, sessionId)
+            },
+        )
+    }
     val uiState by viewModel.state.collectAsState()
 
     // The only ambient loop on this screen: a once-a-second nudge so the

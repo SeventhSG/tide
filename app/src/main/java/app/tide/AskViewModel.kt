@@ -1,8 +1,11 @@
 package app.tide
 
+import app.tide.ask.InferenceEngine
 import app.tide.ask.InstallState
 import app.tide.ask.ModelInstaller
 import app.tide.ask.ModelSpec
+import app.tide.ask.TrainingTools
+import app.tide.core.data.training.TrainingRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,11 +30,68 @@ class AskViewModel(
     private val installer: ModelInstaller,
     private val scope: CoroutineScope,
     private val spec: ModelSpec = ModelSpec.DEFAULT,
+    /** Null only in tests that are about the download and not the chat. */
+    private val repository: TrainingRepository? = null,
+    /** Unset until a real engine exists. See [InferenceEngine]. */
+    private val engine: InferenceEngine? = null,
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val _state = MutableStateFlow(read())
     val state: StateFlow<AskUiState> = _state.asStateFlow()
 
     private var installJob: Job? = null
+
+    /**
+     * Answers straight from the database, no model involved.
+     *
+     * Sending a message never blocks on the download above: these tools read
+     * SQL, not the model file, so Ask can say something true about your
+     * training whether or not anything has been installed. What it cannot do
+     * is hold a conversation, and it says that once rather than pretending.
+     */
+    fun onSend(text: String) {
+        val message = text.trim()
+        if (message.isBlank()) return
+        _state.value = _state.value.copy(
+            messages = _state.value.messages + AskUiState.ChatMessage(fromUser = true, text = message),
+        )
+        scope.launch {
+            val reply = respond(message)
+            _state.value = _state.value.copy(
+                messages = _state.value.messages + AskUiState.ChatMessage(fromUser = false, text = reply),
+            )
+        }
+    }
+
+    private suspend fun respond(message: String): String {
+        val repo = repository
+            ?: return "There is no training data to read from here."
+
+        engine?.takeIf { it.isReady }?.let {
+            return it.reply(message, _state.value.messages.map { m -> m.text })
+        }
+
+        val lower = message.lowercase()
+        return when {
+            "this week" in lower -> TrainingTools.sessionsThisWeek(repo, now())
+            "volume" in lower -> TrainingTools.volumeLast7Days(repo, now())
+            "balance" in lower || "muscle" in lower -> TrainingTools.muscleBalance(repo)
+            "last time" in lower -> {
+                val exercise = lower
+                    .substringAfter("last time i", lower)
+                    .replace(Regex("did|trained|lifted|\\?"), "")
+                    .trim()
+                if (exercise.isBlank()) {
+                    "Which exercise?"
+                } else {
+                    TrainingTools.lastPerformance(repo, exercise)
+                }
+            }
+
+            else -> "There is no real conversation yet, only direct lookups. Try asking about " +
+                "sessions this week, volume, muscle balance, or \"last time I did <exercise>\"."
+        }
+    }
 
     fun onInstall() {
         if (installJob?.isActive == true) return
@@ -79,12 +139,15 @@ class AskViewModel(
     fun onRemove() {
         installJob?.cancel()
         installer.remove()
-        _state.value = read()
+        // Removing the weights does not clear the conversation: chat reads
+        // the database, not the model file, and nothing here was answered by
+        // the model that is being removed.
+        _state.value = read().copy(messages = _state.value.messages)
     }
 
     fun refresh() {
         if (installJob?.isActive == true) return
-        _state.value = read()
+        _state.value = read().copy(messages = _state.value.messages)
     }
 
     private fun read() = AskUiState(
@@ -109,4 +172,7 @@ data class AskUiState(
     val progress: Float = 0f,
     val downloadedLabel: String? = null,
     val error: String? = null,
-)
+    val messages: List<ChatMessage> = emptyList(),
+) {
+    data class ChatMessage(val fromUser: Boolean, val text: String)
+}

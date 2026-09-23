@@ -204,4 +204,31 @@ class SessionViewModelTest {
         assertTrue(summary.exercises.isEmpty())
         assertEquals(null, runBlocking { repo.observeActiveSession().first() })
     }
+
+    @Test
+    fun `opening a session schedules its watchdog, and finishing cancels it`() {
+        var opened: Pair<String, Long>? = null
+        var closed: String? = null
+
+        vm = SessionViewModel(
+            squat.id, repo, scope, now = { clock },
+            onSessionOpen = { id, startedAt -> opened = id to startedAt },
+            onSessionClosed = { id -> closed = id },
+        )
+        awaitState { it.exerciseName.isNotEmpty() }
+
+        val openedSessionId = requireNotNull(opened) { "opening must schedule a watchdog" }.first
+        assertEquals(clock, opened!!.second)
+        assertEquals(null, closed)
+
+        vm.onFinishRequested()
+        vm.onFinishConfirmed()
+        awaitState { it.summary != null }
+
+        assertEquals(
+            "finishing must cancel the same session's watchdog",
+            openedSessionId,
+            closed,
+        )
+    }
 }

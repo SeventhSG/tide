@@ -12,14 +12,26 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import app.tide.body.HealthSource
@@ -32,6 +44,7 @@ import app.tide.core.design.TideColors
 import app.tide.core.design.TideGhostButton
 import app.tide.core.design.TideTheme
 import app.tide.core.design.oceanScrimColor
+import app.tide.core.design.tidePress
 
 /**
  * Body, Money and Ask: the three sections whose state is mostly about what is
@@ -221,6 +234,7 @@ fun AskScreen(
     onInstall: () -> Unit = {},
     onCancel: () -> Unit = {},
     onRemove: () -> Unit = {},
+    onSend: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     OceanBackground(modifier) {
@@ -304,19 +318,138 @@ fun AskScreen(
 
             Spacer(Modifier.height(10.dp))
             Scrim {
+                Text("ASK YOUR TRAINING DATA", style = LabelStyle, color = TideColors.TextFaint)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Direct lookups, not a conversation, and not the model above: these read " +
+                        "the database whether or not anything is installed. Try sessions this " +
+                        "week, volume, muscle balance, or \"last time I did <exercise>\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TideColors.TextMuted,
+                )
+
+                if (state.messages.isNotEmpty()) {
+                    Spacer(Modifier.height(14.dp))
+                    state.messages.forEach { message ->
+                        ChatBubble(message)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+
+                Spacer(Modifier.height(if (state.messages.isEmpty()) 14.dp else 6.dp))
+                ChatInput(onSend = onSend)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Scrim {
                 Text("WHAT IT CANNOT DO YET", style = LabelStyle, color = TideColors.TextFaint)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Answer a question. The weights can be installed and removed, and that " +
-                        "is genuinely all: the inference engine and the tool layer that " +
-                        "would read your training are not written yet, so there is no chat " +
-                        "box here pretending otherwise.",
+                    "Hold an actual conversation, or answer anything the lookups above do not " +
+                        "name directly. That needs a real engine running on the model once it " +
+                        "is installed, and building one blind, with no phone to load it on, is " +
+                        "how a native library ends up crashing on the first device that runs " +
+                        "it. This screen says so rather than guessing.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TideColors.TextMuted,
                 )
             }
 
             Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun ChatBubble(message: AskUiState.ChatMessage) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start,
+    ) {
+        val shape = ContinuousCornerShape(16.dp)
+        Box(
+            Modifier
+                .clip(shape)
+                .background(
+                    if (message.fromUser) TideColors.Accent.copy(alpha = 0.16f)
+                    else Color.White.copy(alpha = 0.06f),
+                )
+                .border(
+                    1.dp,
+                    if (message.fromUser) TideColors.Accent.copy(alpha = 0.4f) else TideColors.Hairline,
+                    shape,
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        ) {
+            Text(
+                message.text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TideColors.Text,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChatInput(onSend: (String) -> Unit) {
+    var draft by remember { mutableStateOf("") }
+    val shape = ContinuousCornerShape(16.dp)
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .weight(1f)
+                .height(52.dp)
+                .clip(shape)
+                .background(Color.White.copy(alpha = 0.05f))
+                .border(1.dp, TideColors.Hairline, shape)
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            val send = {
+                if (draft.isNotBlank()) {
+                    onSend(draft)
+                    draft = ""
+                }
+            }
+            BasicTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = TideColors.Text),
+                cursorBrush = SolidColor(TideColors.Accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { send() }),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { field ->
+                    if (draft.isEmpty()) {
+                        Text(
+                            "Ask something",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TideColors.TextFaint,
+                        )
+                    }
+                    field()
+                },
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier
+                .size(52.dp)
+                .clip(shape)
+                .background(if (draft.isBlank()) Color.White.copy(alpha = 0.05f) else TideColors.Accent)
+                .tidePress(enabled = draft.isNotBlank()) {
+                    onSend(draft)
+                    draft = ""
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "SEND",
+                style = LabelStyle,
+                color = if (draft.isBlank()) TideColors.TextFaint else TideColors.OnAccent,
+            )
         }
     }
 }

@@ -18,7 +18,7 @@ Training that decides what you lift today. Body, read from your own watch. No ac
 [![Top language](https://img.shields.io/github/languages/top/SeventhSG/tide?style=flat-square&color=2ED3B0&labelColor=0B1D25)](https://github.com/SeventhSG/tide)
 [![Stars](https://img.shields.io/github/stars/SeventhSG/tide?style=flat-square&color=2ED3B0&labelColor=0B1D25)](https://github.com/SeventhSG/tide/stargazers)
 
-**293 tests green · minSdk 26 · Kotlin, Compose, Room · nothing in here phones home**
+**306 tests green · minSdk 26 · Kotlin, Compose, Room · nothing in here phones home**
 
 </div>
 
@@ -26,10 +26,11 @@ Training that decides what you lift today. Body, read from your own watch. No ac
 
 ## Where it stands
 
-**v0.1.2.** Training is real and usable: log a session, finish it, and the progression engine
+**v0.1.3.** Training is real and usable: log a session, finish it, and the progression engine
 decides next week's numbers, over a **1,311-exercise library** rather than a starter set.
 Around it there is a week planner, a history calendar, a muscle map, importers, a quiet daily
-summary with a sleep guard, and a Body section reading Health Connect.
+summary with a sleep guard, a first-run onboarding screen, and a Body section reading Health
+Connect. Ask can answer real questions about your training straight from the database.
 
 **It has never run on a physical phone.** The machine it is built on has no usable emulator,
 so every screen is verified by rendering it on the JVM and every rule by test. That is a real
@@ -38,9 +39,9 @@ gap, stated here rather than discovered on install.
 | | |
 |---|---|
 | Builds | `app-debug.apk`, 13 MB, minSdk 26, targetSdk 35 |
-| Tests | 293 green: progression, schedule, notify, importers, migrations, every viewmodel |
+| Tests | 306 green: progression, schedule, notify, importers, migrations, every viewmodel |
 | Sections | Today, Train, Body, Money (empty on purpose), Ask |
-| Not yet | Answers in Ask, Money, retroactive logging, a licensed image library |
+| Not yet | Real generation in Ask, Money, retroactive logging, a licensed image library |
 
 ---
 
@@ -82,9 +83,23 @@ never will be.
 
 ### Ask
 
-The model installs onto the phone, with progress, resumable and removable. **It cannot answer
-anything yet**: the inference engine is not written, and the screen says so instead of
-showing a chat box that does nothing.
+Answers real questions straight from your training data today, no model required: sessions
+this week, volume, muscle balance, or the last time you did a named lift. A model installs
+onto the phone separately, with progress, resumable and removable, but **nothing generates a
+reply from it yet**. Real on-device generation turned out to need either a native library
+(llama.cpp, hand rolled by every project that does this, nothing published) or a model gated
+behind a licence (every capable MediaPipe-format model is Google's own Gemma). Building either
+blind, with no device to load the result on, is how a native library ends up crashing on the
+first phone that finally runs it, so the screen says exactly that instead of guessing.
+
+### Onboarding, and a session that does not go missing
+
+A first-run screen asks for notifications and Health Connect together, once, before Today.
+Both stay skippable, and granting either opts into nothing else: the daily summary still
+waits for its own switch in Settings. A session schedules one check two hours after it opens;
+if it is somehow still the same session and still open, one notification asks whether
+training is still going, since every set was already safe on disk regardless and the actual
+risk was a forgotten Finish, not lost data.
 
 ---
 
